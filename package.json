@@ -1,0 +1,11 @@
+{
+  "name": "job-autopilot",
+  "private": true,
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "scripts": {
+    "setup": "npm install && npm --prefix server install && npm --prefix web install && npm --prefix server run browsers",
+    "dev": "concurrently -k -n server,web -c blue,green \"npm --prefix server run dev\" \"npm --prefix web run dev\""
+  }
+}

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Acme Job Application</title>
+  <style>
+    .clip-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+    .opacity-zero {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .combobox-list {
+      display: none;
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .combobox-list.open {
+      display: block;
+    }
+    .combobox-option {
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .combobox-option:hover {
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+  <p>Thank you for your interest in Acme. Please fill in the form.</p>
+
+  <form id="app-form">
+    <!-- First Name* (label for=) -->
+    <div>
+      <label for="first-name">First Name*</label>
+      <input id="first-name" type="text" required />
+    </div>
+
+    <!-- Last name * (wrapping label) -->
+    <div>
+      <label>
+        Last name *
+        <input type="text" id="last-name" required />
+      </label>
+    </div>
+
+    <!-- email input with only aria-label "Email address" -->
+    <div>
+      <input type="email" aria-label="Email address" />
+    </div>
+
+    <!-- tel input with only nearby text "Phone *" -->
+    <div>
+      <span>Phone *</span>
+      <input type="tel" />
+    </div>
+
+    <!-- "LinkedIn Profile" as text in a sibling div -->
+    <div>
+      <div class="sibling-label">LinkedIn Profile</div>
+      <input type="text" />
+    </div>
+
+    <!-- "Preferred name" -->
+    <div>
+      <label for="pref-name">Preferred name</label>
+      <input id="pref-name" type="text" />
+    </div>
+
+    <!-- required file input "Resume/CV *" hidden with a 1px clip class next to an "Attach" button, and optional "Cover Letter" -->
+    <div>
+      <label for="resume-input">Resume/CV *</label>
+      <input id="resume-input" class="clip-hidden" type="file" required />
+      <button type="button" onclick="document.getElementById('resume-input').click()">Attach</button>
+    </div>
+
+    <div>
+      <label for="cover-input">Cover Letter</label>
+      <input id="cover-input" type="file" />
+    </div>
+
+    <!-- required select "Are you legally authorized to work in Nigeria? *" with Select... / Yes / No -->
+    <div>
+      <label for="auth-select">Are you legally authorized to work in Nigeria? *</label>
+      <select id="auth-select" required>
+        <option value="">Select...</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    </div>
+
+    <!-- fieldset of opacity:0 radios "Do you require visa sponsorship? *" (Yes / No). Choosing Yes reveals hidden required textarea -->
+    <fieldset>
+      <legend>Do you require visa sponsorship? *</legend>
+      <label>
+        <input type="radio" name="visa_sponsorship" value="Yes" class="opacity-zero" required />
+        Yes
+      </label>
+      <label>
+        <input type="radio" name="visa_sponsorship" value="No" class="opacity-zero" required />
+        No
+      </label>
+    </fieldset>
+
+    <!-- Hidden textarea revealed when Yes is chosen -->
+    <div id="visa-details" style="display: none;">
+      <label for="visa-explain">If yes, please explain *</label>
+      <textarea id="visa-explain" required></textarea>
+    </div>
+
+    <!-- checkbox group "Which languages do you speak?" (English / French / Hausa) -->
+    <fieldset>
+      <legend>Which languages do you speak?</legend>
+      <label>
+        <input type="checkbox" name="languages" value="English" />
+        English
+      </label>
+      <label>
+        <input type="checkbox" name="languages" value="French" />
+        French
+      </label>
+      <label>
+        <input type="checkbox" name="languages" value="Hausa" />
+        Hausa
+      </label>
+    </fieldset>
+
+    <!-- "Current employer" text input -->
+    <div>
+      <label for="employer">Current employer</label>
+      <input id="employer" type="text" />
+    </div>
+
+    <!-- input with role="combobox" and aria-autocomplete="list", "How did you hear about us?" -->
+    <div>
+      <label for="source-combobox">How did you hear about us?</label>
+      <input
+        id="source-combobox"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        autocomplete="off"
+      />
+      <div id="source-listbox" role="listbox" class="combobox-list">
+        <div role="option" class="combobox-option" data-value="LinkedIn">LinkedIn</div>
+        <div role="option" class="combobox-option" data-value="Job board">Job board</div>
+        <div role="option" class="combobox-option" data-value="Referral">Referral</div>
+        <div role="option" class="combobox-option" data-value="Company website">Company website</div>
+      </div>
+    </div>
+
+    <!-- required textarea "Why do you want to work at Acme? *" -->
+    <div>
+      <label for="why-acme">Why do you want to work at Acme? *</label>
+      <textarea id="why-acme" required></textarea>
+    </div>
+
+    <!-- required text input "Do you hold a government security clearance? *" -->
+    <div>
+      <label for="clearance">Do you hold a government security clearance? *</label>
+      <input id="clearance" type="text" required />
+    </div>
+
+    <!-- required checkbox "I agree to the privacy policy *" -->
+    <div>
+      <label>
+        <input type="checkbox" id="privacy-agree" required />
+        I agree to the privacy policy *
+      </label>
+    </div>
+
+    <!-- Submit application button -->
+    <button type="submit" id="submit-btn">Submit application</button>
+  </form>
+
+  <script>
+    const form = document.getElementById('app-form');
+    const visaYes = document.querySelector('input[name="visa_sponsorship"][value="Yes"]');
+    const visaNo = document.querySelector('input[name="visa_sponsorship"][value="No"]');
+    const visaDetails = document.getElementById('visa-details');
+
+    if (visaYes && visaNo && visaDetails) {
+      visaYes.addEventListener('change', () => {
+        if (visaYes.checked) visaDetails.style.display = 'block';
+      });
+      visaNo.addEventListener('change', () => {
+        if (visaNo.checked) visaDetails.style.display = 'none';
+      });
+    }
+
+    const combo = document.getElementById('source-combobox');
+    const listbox = document.getElementById('source-listbox');
+    if (combo && listbox) {
+      const options = Array.from(listbox.querySelectorAll('[role="option"]'));
+
+      const filterOptions = () => {
+        const val = combo.value.toLowerCase().trim();
+        let visibleCount = 0;
+        options.forEach(opt => {
+          const match = opt.textContent.toLowerCase().includes(val);
+          opt.style.display = match ? 'block' : 'none';
+          if (match) visibleCount++;
+        });
+        if (visibleCount > 0) {
+          listbox.classList.add('open');
+          combo.setAttribute('aria-expanded', 'true');
+        } else {
+          listbox.classList.remove('open');
+          combo.setAttribute('aria-expanded', 'false');
+        }
+      };
+
+      combo.addEventListener('click', () => {
+        listbox.classList.toggle('open');
+        combo.setAttribute('aria-expanded', listbox.classList.contains('open') ? 'true' : 'false');
+      });
+
+      combo.addEventListener('input', filterOptions);
+
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          combo.value = opt.getAttribute('data-value') || opt.textContent;
+          listbox.classList.remove('open');
+          combo.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      document.body.innerHTML = '<h1>Thank you for applying! We have received your application.</h1>';
+    });
+  </script>
+</body>
+</html>
