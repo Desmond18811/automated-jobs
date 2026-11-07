@@ -446,7 +446,7 @@ function matchProfileRule(
   if (/linked\s*in/i.test(label)) {
     return {
       matched: true,
-      value: profile.linkedin || '',
+      value: profile.linkedin || profile.github || profile.portfolio || profile.website || '',
       missingThing: 'LinkedIn profile'
     };
   }

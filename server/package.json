@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "browsers": "playwright install chromium",
     "fixtures": "tsx test/make-fixtures.ts",
-    "selftest": "tsx test/selftest.ts"
+    "selftest": "tsx test/selftest.ts",
+    "upgrade-check": "tsx test/upgrade-check.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

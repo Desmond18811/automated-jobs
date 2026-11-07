@@ -40,6 +40,7 @@ export interface Job {
   site?: string;
   message?: string;
   screenshot?: string;
+  trace?: string;
   flagged?: Flag[];
   actions?: Decision[];
   draft?: { to: string; subject: string; body: string };
@@ -114,6 +115,8 @@ export interface Profile {
   veteranStatus?: string;
   disabilityStatus?: string;
   referredBy?: string;
+  /** @deprecated Never stored (cleanProfile drops it). */
+  portalPassword?: string;
   extraFacts: string;
 }
 
@@ -154,8 +157,32 @@ export const defaultProfile: Profile = {
   veteranStatus: '',
   disabilityStatus: '',
   referredBy: '',
+  portalPassword: '',
   extraFacts: ''
 };
+
+export interface AnswerEntry {
+  id: string;
+  question: string;
+  key: string;
+  fieldType?: string;
+  options?: string[];
+  answer: string | string[] | boolean;
+  source: 'form' | 'dashboard';
+  uses: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotifySettings {
+  runStarted: boolean;
+  jobStarted: boolean;
+  accountCreated: boolean;
+  applied: boolean;
+  needsYou: boolean;
+  failed: boolean;
+  runFinished: boolean;
+}
 
 export interface Settings {
   reviewBeforeSubmit: boolean;
@@ -165,6 +192,14 @@ export interface Settings {
   whatsappAlerts: boolean;
   alertReviewJobs: boolean;
   alertDelaySec: number;
+  notify: NotifySettings;
+  notifyGapSec: number;
+  notifyMaxPerHour: number;
+  useAnswerLibrary: boolean;
+  aiNavigator: boolean;
+  keepTraces: boolean;
+  /** @deprecated Never stored. */
+  portalPassword?: string;
 }
 
 export interface CvInfo {
@@ -174,12 +209,24 @@ export interface CvInfo {
   uploadedAt: string;
 }
 
+export interface NotifyLogEntry {
+  at: string;
+  event: string;
+  jobId?: string;
+  text: string;
+  provider: string;
+  ok: boolean;
+  status?: number;
+  response?: string;
+}
+
 export interface DB {
   profile: Profile;
   settings: Settings;
   cv: CvInfo | null;
   jobs: Job[];
   intake: IntakeBatch[];
+  answers: AnswerEntry[];
 }
 
 export interface RunnerState {
@@ -194,8 +241,15 @@ export interface AppState {
   cv: { fileName: string; uploadedAt: string; chars: number } | null;
   jobs: Job[];
   intake: IntakeBatch[];
+  answers?: AnswerEntry[];
   runner: RunnerState;
   aiReady: boolean;
+  aiStatus?: {
+    text: string | null;
+    vision: string | null;
+    pdf: string | null;
+  };
   mailReady: boolean;
   whatsappReady: boolean;
+  notifyLast?: NotifyLogEntry | null;
 }

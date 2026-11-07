@@ -1,6 +1,7 @@
 import type { Page, Frame } from 'playwright';
 import { normalizeUrl } from '../store.js';
 import { classifyUrl } from '../intake/leads.js';
+import type { Profile, Settings } from '../types.js';
 
 export function hostOf(rawUrl: string): string {
   try {
@@ -151,7 +152,7 @@ export async function findFormFrame(
 }
 
 const FIND_APPLY_BUTTON_SCRIPT = String.raw`(() => {
-  const regex = /^\s*(click here to )?(apply|apply now|apply here|apply online|apply for (this |the )?(job|position|role|vacancy)|apply on (the )?company('?s)? (site|website)|easy apply|quick apply|start (your )?application)\s*[!.]?\s*$/i;
+  const regex = /^\s*(click here to )?(apply|apply now|apply here|apply online|apply manually|autofill with resume|apply with resume|use my last application|apply for (this |the )?(job|position|role|vacancy)|apply on (the )?company('?s)? (site|website)|easy apply|quick apply|start (your )?(application|applying)|submit application)\s*[!.]?\s*$/i;
 
   function isVisible(el) {
     if (!el || el.nodeType !== 1) return false;
@@ -161,12 +162,35 @@ const FIND_APPLY_BUTTON_SCRIPT = String.raw`(() => {
     return r.width > 0 && r.height > 0;
   }
 
+  // 1. High priority: Workday / ATS specific sub-actions (e.g. inside an open apply menu)
+  const prioritySelectors = [
+    '[data-automation-id="applyManually"]',
+    '[data-automation-id="autofillWithResume"]',
+    '[data-automation-id="useMyLastApplication"]',
+    'a[data-automation-id*="apply"]',
+    'button[data-automation-id*="apply"]'
+  ];
+
+  for (const sel of prioritySelectors) {
+    const el = document.querySelector(sel);
+    if (el && isVisible(el) && !el.hasAttribute('data-ja-apply-clicked')) {
+      let href = null;
+      if (el.tagName === 'A' && el.href) {
+        href = el.href;
+      }
+      el.setAttribute('data-ja-apply', '1');
+      return { found: true, href: href };
+    }
+  }
+
+  // 2. Standard apply candidates
   const candidates = Array.from(
     document.querySelectorAll('a, button, input[type="button"], input[type="submit"], [role="button"]')
   );
 
   for (const el of candidates) {
     if (el.disabled) continue;
+    if (el.hasAttribute('data-ja-apply-clicked')) continue;
     if (!isVisible(el)) continue;
 
     const name = (
@@ -211,6 +235,7 @@ export async function clickApply(page: Page): Promise<Page | null> {
       ) {
         await page.goto(res.href);
         await settle(page);
+        await page.bringToFront().catch(() => {});
         return page;
       }
 
@@ -222,14 +247,22 @@ export async function clickApply(page: Page): Promise<Page | null> {
       const locator = frame.locator('[data-ja-apply="1"]').first();
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.click().catch(() => {});
+      await locator
+        .evaluate((el) => {
+          el.removeAttribute('data-ja-apply');
+          el.setAttribute('data-ja-apply-clicked', '1');
+        })
+        .catch(() => {});
 
       const popup = await popupPromise;
       if (popup) {
         await settle(popup);
+        await popup.bringToFront().catch(() => {});
         return popup;
       }
 
       await settle(page);
+      await page.bringToFront().catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return page;
     }
@@ -264,11 +297,11 @@ export async function hasVisibleCaptcha(page: Page): Promise<boolean> {
   const mainFrame = page.mainFrame();
 
   for (const frame of page.frames()) {
-    if (frame === mainFrame) continue;
-
     const frameUrl = frame.url().toLowerCase();
     const isHcaptcha = frameUrl.includes('hcaptcha.com');
     const isCloudflare = frameUrl.includes('challenges.cloudflare.com');
+    const isArkose = frameUrl.includes('arkoselabs.com') || frameUrl.includes('funcaptcha');
+    const isGeetest = frameUrl.includes('geetest.com');
     const isRecaptcha =
       frameUrl.includes('/recaptcha/api2/anchor') ||
       frameUrl.includes('/recaptcha/enterprise/anchor') ||
@@ -276,7 +309,8 @@ export async function hasVisibleCaptcha(page: Page): Promise<boolean> {
       frameUrl.includes('/recaptcha/enterprise/bframe');
     const isNotInvisible = !frameUrl.includes('size=invisible');
 
-    if (isHcaptcha || isCloudflare || (isRecaptcha && isNotInvisible)) {
+    if (isHcaptcha || isCloudflare || isArkose || isGeetest || (isRecaptcha && isNotInvisible)) {
+      if (frame === mainFrame) return true;
       try {
         const frameEl = await frame.frameElement();
         const isVisible = (await frameEl.evaluate((el: any) => {
@@ -295,6 +329,116 @@ export async function hasVisibleCaptcha(page: Page): Promise<boolean> {
         if (isVisible) return true;
       } catch {}
     }
+  }
+
+  // Also check main document for visible captcha elements
+  try {
+    const hasDomCaptcha = (await page.evaluate(`(() => {
+      function isVisible(el) {
+        if (!el || el.nodeType !== 1) return false;
+        const s = window.getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }
+
+      const sel = '.g-recaptcha, .h-captcha, .cf-turnstile, [data-sitekey], #captcha, [id*="captcha" i]';
+      const els = Array.from(document.querySelectorAll(sel));
+      return els.some(isVisible);
+    })()`)) as boolean;
+    if (hasDomCaptcha) return true;
+  } catch {}
+
+  return false;
+}
+
+export async function tryBypassAuth(
+  page: Page,
+  profile: Profile,
+  _settings?: Settings
+): Promise<boolean> {
+  if (!(await hasLoginWall(page))) {
+    return true;
+  }
+
+  // Until step 17's vault exists, tryBypassAuth may only click "Continue with Google"
+  // and pick the account in Google's chooser when the bot's Chrome profile is already signed in.
+  // Otherwise return false. Never type a Google password.
+  for (const frame of page.frames()) {
+    try {
+      const googleFound = (await frame.evaluate(`(() => {
+        function isVisible(el) {
+          if (!el || el.nodeType !== 1) return false;
+          const s = window.getComputedStyle(el);
+          if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        }
+
+        const candidates = Array.from(
+          document.querySelectorAll('button, a, [role="button"], div[role="button"], [data-provider="google"], [data-automation-id*="google" i]')
+        );
+
+        for (const el of candidates) {
+          if (el.disabled) continue;
+          if (!isVisible(el)) continue;
+          const text = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim();
+          if (
+            /sign in with google|continue with google|log in with google|google/i.test(text) ||
+            el.getAttribute('data-provider') === 'google' ||
+            (el.getAttribute('data-automation-id') || '').toLowerCase().includes('google')
+          ) {
+            el.setAttribute('data-ja-google', '1');
+            return true;
+          }
+        }
+        return false;
+      })()`)) as boolean;
+
+      if (googleFound) {
+        const popupPromise = page
+          .context()
+          .waitForEvent('page', { timeout: 6000 })
+          .catch(() => null);
+
+        const locator = frame.locator('[data-ja-google="1"]').first();
+        await locator.scrollIntoViewIfNeeded().catch(() => {});
+        await locator.click().catch(() => {});
+
+        const popup = await popupPromise;
+        if (popup) {
+          await settle(popup);
+          // If Google account chooser is displayed, select user's account if matching profile.email
+          await popup
+            .evaluate((userEmail) => {
+              const items = Array.from(
+                document.querySelectorAll(
+                  'li, div[role="link"], [data-email], [data-identifier]'
+                )
+              );
+              for (const item of items) {
+                const text = (item.textContent || '').toLowerCase();
+                if (text.includes(userEmail.toLowerCase())) {
+                  (item as HTMLElement).click();
+                  return;
+                }
+              }
+              const firstAcc = document.querySelector(
+                '[data-authuser="0"], li[data-account-identifier], div[data-identifier]'
+              );
+              if (firstAcc) (firstAcc as HTMLElement).click();
+            }, profile.email)
+            .catch(() => {});
+
+          await popup.waitForEvent('close', { timeout: 12000 }).catch(() => {});
+        }
+
+        await settle(page);
+        if (!(await hasLoginWall(page))) {
+          return true;
+        }
+      }
+    } catch {}
   }
 
   return false;

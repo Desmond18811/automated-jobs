@@ -40,6 +40,7 @@ export interface Job {
   site?: string;
   message?: string;
   screenshot?: string;
+  trace?: string; // replay file name in data/traces (kept for jobs that failed or needed you)
   flagged?: Flag[];
   actions?: Decision[]; // buttons to show while it waits on me
   draft?: { to: string; subject: string; body: string };
@@ -114,7 +115,33 @@ export interface Profile {
   veteranStatus?: string;
   disabilityStatus?: string;
   referredBy?: string;
+  /** @deprecated Never stored (cleanProfile drops it). Site passwords live in the vault (step 17). */
+  portalPassword?: string;
   extraFacts: string;
+}
+
+/** An answer you gave on a real form, reused when the same question comes up again. */
+export interface AnswerEntry {
+  id: string;
+  question: string; // as the form showed it
+  key: string; // normalized question used for matching
+  fieldType?: string; // text, textarea, select, radio, checkbox, checkboxes, combobox...
+  options?: string[]; // options the form offered when you answered
+  answer: string | string[] | boolean;
+  source: 'form' | 'dashboard'; // captured from a form you filled, or added by you in the dashboard
+  uses: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotifySettings {
+  runStarted: boolean;
+  jobStarted: boolean;
+  accountCreated: boolean;
+  applied: boolean;
+  needsYou: boolean;
+  failed: boolean;
+  runFinished: boolean;
 }
 
 export interface Settings {
@@ -124,7 +151,15 @@ export interface Settings {
   maxEmailsPerHour: number; // default 10, clamp 1-30
   whatsappAlerts: boolean; // default true
   alertReviewJobs: boolean; // default false
-  alertDelaySec: number; // default 90, clamp 0-3600
+  alertDelaySec: number; // default 0 (immediate), clamp 0-3600
+  notify: NotifySettings; // which WhatsApp messages to send
+  notifyGapSec: number; // default 8, clamp 2-60
+  notifyMaxPerHour: number; // default 60, clamp 10-200
+  useAnswerLibrary: boolean; // default true
+  aiNavigator: boolean; // default true: let the AI pick the next click on unfamiliar portals
+  keepTraces: boolean; // default true: keep a replay of jobs that failed or needed you
+  /** @deprecated Never stored. Site passwords live in the vault (step 17). */
+  portalPassword?: string;
 }
 
 export interface CvInfo {
@@ -134,12 +169,24 @@ export interface CvInfo {
   uploadedAt: string;
 }
 
+export interface NotifyLogEntry {
+  at: string;
+  event: string;
+  jobId?: string;
+  text: string;
+  provider: string;
+  ok: boolean;
+  status?: number;
+  response?: string; // first 200 chars, secrets masked
+}
+
 export interface DB {
   profile: Profile;
   settings: Settings;
   cv: CvInfo | null;
   jobs: Job[];
   intake: IntakeBatch[]; // newest first, keep 10
+  answers: AnswerEntry[];
 }
 
 export interface RunnerState {

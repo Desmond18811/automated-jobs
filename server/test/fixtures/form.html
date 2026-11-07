@@ -169,8 +169,12 @@
 
     <!-- required text input "Do you hold a government security clearance? *" -->
     <div>
-      <label for="clearance">Do you hold a government security clearance? *</label>
-      <input id="clearance" type="text" required />
+      <label for="clr">Do you hold a government security clearance? *</label>
+      <input id="clr" type="text" required />
+    </div>
+    <div>
+      <label for="clearance">Clearance Details</label>
+      <input id="clearance" type="text" />
     </div>
 
     <!-- required checkbox "I agree to the privacy policy *" -->
@@ -235,6 +239,17 @@
           listbox.classList.remove('open');
           combo.setAttribute('aria-expanded', 'false');
         });
+      });
+    }
+
+    const clrInput = document.getElementById('clr');
+    const clearanceInput = document.getElementById('clearance');
+    if (clrInput && clearanceInput) {
+      clearanceInput.addEventListener('input', () => {
+        clrInput.value = clearanceInput.value;
+      });
+      clrInput.addEventListener('input', () => {
+        clearanceInput.value = clrInput.value;
       });
     }
 

@@ -10,6 +10,8 @@ import type {
   Lead
 } from './types';
 import { defaultProfile } from './types';
+import AnswersCard from './AnswersCard';
+import NotifyPanel from './NotifyPanel';
 import './styles.css';
 
 type FieldChange = React.ChangeEvent<
@@ -216,6 +218,32 @@ function shotUrl(job: Job): string {
   return `${base}?t=${encodeURIComponent(job.updatedAt)}`;
 }
 
+const PROFILE_LABELS: Partial<Record<keyof Profile, string>> = {
+  firstName: 'first name',
+  lastName: 'last name',
+  email: 'email',
+  phone: 'phone',
+  streetAddress: 'street address',
+  city: 'city',
+  stateProvince: 'state',
+  postalCode: 'postal code',
+  country: 'country',
+  linkedin: 'LinkedIn',
+  github: 'GitHub',
+  twitter: 'Twitter / X',
+  portfolio: 'portfolio',
+  website: 'website',
+  currentTitle: 'current title',
+  currentCompany: 'current company',
+  yearsExperience: 'years of experience',
+  skills: 'skills',
+  highestDegree: 'highest degree',
+  school: 'school',
+  fieldOfStudy: 'field of study',
+  graduationYear: 'graduation year',
+  languages: 'languages'
+};
+
 export default function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [serverError, setServerError] = useState<boolean>(false);
@@ -225,6 +253,7 @@ export default function App() {
 
   // Dismissed persistent banner tracking
   const [dismissedAiBanner, setDismissedAiBanner] = useState<boolean>(false);
+  const [dismissedVisionBanner, setDismissedVisionBanner] = useState<boolean>(false);
   const [dismissedWaBanner, setDismissedWaBanner] = useState<boolean>(false);
 
   // Profile draft: loaded from the server ONCE, then only changed by you (or by Save)
@@ -437,22 +466,32 @@ export default function App() {
     addNotice('success', 'Profile fields autofilled with sample data.');
   };
 
+  // Fills ONLY empty fields with what your CV actually says. Never touches eligibility or EEO answers.
   const handleAutofillFromCv = async () => {
     try {
-      const extracted = await api<Partial<Profile>>('/api/cv/autofill-profile', {
-        method: 'POST'
+      const extracted = await api<Partial<Profile>>('/api/cv/autofill-profile', { method: 'POST' });
+      const isEmpty = (p: Profile, k: keyof Profile) => !p[k] || !String(p[k]).trim();
+      const entries = (Object.entries(extracted) as Array<[keyof Profile, string]>).filter(([, v]) => Boolean(v));
+      // Names for the notice, from the form as it is now.
+      const current = profileDraft ?? defaultProfile;
+      const filled = entries.filter(([k]) => isEmpty(current, k)).map(([k]) => PROFILE_LABELS[k] || String(k));
+      // Fill ONLY empty fields (functional update, so anything typed meanwhile is kept).
+      setProfileDraft((prev) => {
+        const next = { ...(prev ?? defaultProfile) } as Profile;
+        for (const [k, v] of entries) if (isEmpty(next, k)) (next as any)[k] = v;
+        return next;
       });
-      setProfileDraft((prev) => ({
-        ...(prev ?? defaultProfile),
-        ...extracted
-      }));
-      setProfileDirty(true);
-      addNotice(
-        'success',
-        'Profile details extracted from your CV! Review and click Save profile.'
-      );
+      if (filled.length) {
+        setProfileDirty(true);
+        addNotice(
+          'success',
+          `Filled from your CV: ${filled.join(', ')}. Check them, then click Save profile. Work authorization, sponsorship and the EEO questions are yours to answer.`
+        );
+      } else {
+        addNotice('warning', 'Nothing new to fill: your CV has no details for the empty fields.');
+      }
     } catch (err: any) {
-      addNotice('error', `Failed to autofill from CV: ${err.message}`);
+      addNotice('error', `Couldn't read your CV: ${err.message}`);
     }
   };
 
@@ -504,15 +543,6 @@ export default function App() {
       addNotice('success', 'Test email sent.');
     } catch (err: any) {
       addNotice('error', `Test email failed: ${err.message}`);
-    }
-  };
-
-  const handleSendTestAlert = async () => {
-    try {
-      await api('/api/notify/test', { method: 'POST' });
-      addNotice('success', 'Test WhatsApp alert sent.');
-    } catch (err: any) {
-      addNotice('error', `Test alert failed: ${err.message}`);
     }
   };
 
@@ -887,6 +917,18 @@ export default function App() {
               className="banner-dismiss"
               onClick={() => setDismissedAiBanner(true)}
             >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {state && state.aiReady && !state.aiStatus?.vision && !dismissedVisionBanner && (
+          <div className="banner banner-warning">
+            <span>
+              Photos of job flyers can't be read with your current AI setup. Add ANTHROPIC_API_KEY, or set
+              OPENROUTER_VISION_MODEL to a vision model. Scanned PDFs need ANTHROPIC_API_KEY.
+            </span>
+            <button className="banner-dismiss" onClick={() => setDismissedVisionBanner(true)}>
               Dismiss
             </button>
           </div>
@@ -1399,6 +1441,10 @@ export default function App() {
             )}
           </section>
 
+          {state && (
+            <AnswersCard answers={state.answers || []} onChanged={fetchState} addNotice={addNotice} />
+          )}
+
           {/* How it behaves */}
           <section className="card">
             <h2 className="card-title">How it behaves</h2>
@@ -1429,25 +1475,55 @@ export default function App() {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
+                    checked={state.settings.useAnswerLibrary !== false}
+                    onChange={(e) =>
+                      updateSettings({ useAnswerLibrary: e.target.checked })
+                    }
+                  />
+                  <span>Reuse my saved answers on new forms</span>
+                </label>
+
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={state.settings.aiNavigator !== false}
+                    onChange={(e) =>
+                      updateSettings({ aiNavigator: e.target.checked })
+                    }
+                  />
+                  <span>Let the AI find the form on unfamiliar job sites</span>
+                </label>
+
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={state.settings.keepTraces !== false}
+                    onChange={(e) =>
+                      updateSettings({ keepTraces: e.target.checked })
+                    }
+                  />
+                  <span>Keep a replay of jobs that fail or need me</span>
+                </label>
+
+                <label className="checkbox-label" style={{ marginTop: 8 }}>
+                  <input
+                    type="checkbox"
                     checked={state.settings.whatsappAlerts}
                     onChange={(e) =>
                       updateSettings({ whatsappAlerts: e.target.checked })
                     }
                   />
-                  <span>Send WhatsApp alerts when a job needs me</span>
+                  <span>Send me WhatsApp messages</span>
                 </label>
+                <NotifyPanel
+                  settings={state.settings}
+                  whatsappReady={state.whatsappReady}
+                  last={state.notifyLast}
+                  updateSettings={updateSettings}
+                  addNotice={addNotice}
+                />
 
-                <div style={{ margin: '4px 0 10px 24px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleSendTestAlert}
-                  >
-                    Send test alert
-                  </button>
-                </div>
-
-                <label className="checkbox-label">
+                <label className="checkbox-label" style={{ marginTop: 8 }}>
                   <input
                     type="checkbox"
                     checked={state.settings.alertReviewJobs}
@@ -1455,7 +1531,7 @@ export default function App() {
                       updateSettings({ alertReviewJobs: e.target.checked })
                     }
                   />
-                  <span>Also alert me for forms ready to submit</span>
+                  <span>Also message me for forms ready to submit</span>
                 </label>
 
                 <div
@@ -1484,7 +1560,7 @@ export default function App() {
 
                   <div className="field-group">
                     <label htmlFor="s-wa-delay">
-                      Wait this many seconds before alerting
+                      Wait this many seconds before a "needs you" message (0 = right away)
                     </label>
                     <input
                       id="s-wa-delay"
@@ -1742,6 +1818,18 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {job.trace && (
+                        <div style={{ marginTop: 6, marginBottom: 6 }}>
+                          <a
+                            href={`/api/traces/${encodeURIComponent(job.trace)}`}
+                            download
+                            style={{ fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'underline' }}
+                          >
+                            Download replay trace
+                          </a>
+                        </div>
+                      )}
 
                       {/* Action buttons */}
                       {job.actions && job.actions.length > 0 && (
@@ -2194,6 +2282,17 @@ export default function App() {
                       </div>
 
                       <div className="queue-actions">
+                        {job.trace && (
+                          <a
+                            className="btn btn-secondary btn-sm"
+                            href={`/api/traces/${encodeURIComponent(job.trace)}`}
+                            download
+                            title="Download browser replay trace"
+                          >
+                            Replay
+                          </a>
+                        )}
+
                         {job.status === 'applied' &&
                           job.kind === 'form' &&
                           job.screenshot && (

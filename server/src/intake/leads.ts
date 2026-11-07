@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
-import type { Lead, Job } from '../types.js';
+import type { Lead, Job, Profile } from '../types.js';
 import type { RawMaterial } from './read.js';
-import { normalizeUrl, normalizeTitle } from '../store.js';
+import { normalizeUrl, normalizeTitle, getDB } from '../store.js';
 import {
   extractPostings,
   classifyLinks,
+  aiStatus,
   type Posting,
   type ClassifyLinkItem
 } from '../ai.js';
@@ -149,14 +150,57 @@ function extractSnippet(text: string, match: string, length = 200): string {
   return snippet.slice(0, 300);
 }
 
+export function isRoleMatchingProfile(
+  title: string | undefined,
+  profile?: Profile | null
+): { matches: boolean; reason?: string } {
+  if (!title || !profile) return { matches: true };
+  const targetTitle = (profile.currentTitle || '').trim().toLowerCase();
+  if (!targetTitle) return { matches: true };
+
+  const t = title.toLowerCase();
+
+  // If candidate is a Software / Tech professional
+  const isSoftwareCandidate = /\b(software|developer|engineer|frontend|backend|full\s*stack|web|data|devops|cloud|sre|programmer)\b/i.test(targetTitle);
+
+  if (isSoftwareCandidate) {
+    // Exclude clearly non-software domains
+    const nonSoftwareRegex = /\b(nuclear|hardware|mechanical|civil|chemical|pump|welding|battery|propulsion|aerospace|structural|metallurgy|nurse|nursing|physician|doctor|clinical|accountant|accounting|tax|auditor|legal|paralegal|sales\s*rep|account\s*exec|customer\s*success|customer\s*support|recruiter|office\s*manager|executive\s*assistant|receptionist|construction|real\s*estate|warehouse|driver|power\s*plant)\b/i;
+    if (nonSoftwareRegex.test(t)) {
+      return { matches: false, reason: `Role does not match your target role (${profile.currentTitle})` };
+    }
+
+    // Software/tech matches
+    const softwareRegex = /\b(software|developer|full\s*stack|fullstack|frontend|front\s*end|backend|back\s*end|web|mobile|ios|android|python|react|node|javascript|typescript|engineer|engineering|programmer|api|devops|sre|cloud|platform|data|qa|test|systems|lead|architect|technical)\b/i;
+    if (softwareRegex.test(t)) {
+      return { matches: true, reason: `Matches your skills: ${profile.currentTitle}` };
+    }
+  } else {
+    // Generic match on target title words
+    const words = targetTitle.split(/\s+/).filter((w) => w.length > 3);
+    const matchesAny = words.some((w) => t.includes(w));
+    if (matchesAny) {
+      return { matches: true, reason: `Matches your target role (${profile.currentTitle})` };
+    }
+  }
+
+  return { matches: true };
+}
+
 export async function buildLeads(params: {
   materials: RawMaterial[];
   existingJobs: Job[];
+  profile?: Profile | null;
 }): Promise<{ leads: Lead[]; warnings: string[] }> {
   const leads: Lead[] = [];
   const warnings: string[] = [];
-  const aiKey =
-    process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY;
+  const aiKey = aiStatus().text;
+  let profile = params.profile;
+  if (!profile) {
+    try {
+      profile = getDB()?.profile;
+    } catch {}
+  }
 
   for (const mat of params.materials) {
     // 1. Spreadsheet rows
@@ -202,6 +246,7 @@ export async function buildLeads(params: {
           }
         }
 
+        const matchInfo = isRoleMatchingProfile(title, profile);
         if (url) {
           leads.push({
             id: crypto.randomUUID(),
@@ -217,7 +262,8 @@ export async function buildLeads(params: {
               .slice(0, 300),
             source: mat.source,
             verdict: 'job', // Trust user-listed spreadsheet row
-            selected: true
+            note: matchInfo.reason,
+            selected: matchInfo.matches
           });
         } else if (email) {
           leads.push({
@@ -234,7 +280,8 @@ export async function buildLeads(params: {
               .slice(0, 300),
             source: mat.source,
             verdict: 'job',
-            selected: true
+            note: matchInfo.reason,
+            selected: matchInfo.matches
           });
         } else {
           noLinkOrEmailCount++;
@@ -339,15 +386,12 @@ export async function buildLeads(params: {
         for (const post of postings) {
           // Anti-invention check
           if (!mat.visual) {
-            let valid = false;
             if (post.applyUrl) {
               const normPostUrl = normalizeUrl(post.applyUrl);
               const foundInMat =
                 (mat.text && mat.text.includes(post.applyUrl)) ||
                 mat.links.some((l) => normalizeUrl(l.url) === normPostUrl);
-              if (foundInMat) {
-                valid = true;
-              } else {
+              if (!foundInMat) {
                 warnings.push(
                   `Ignored an address Claude reported that isn't in ${mat.source}.`
                 );
@@ -358,9 +402,7 @@ export async function buildLeads(params: {
               const lowerPostEmail = post.applyEmail.toLowerCase();
               const foundInMat =
                 mat.text && mat.text.toLowerCase().includes(lowerPostEmail);
-              if (foundInMat) {
-                valid = true;
-              } else {
+              if (!foundInMat) {
                 warnings.push(
                   `Ignored an address Claude reported that isn't in ${mat.source}.`
                 );
@@ -413,6 +455,7 @@ export async function buildLeads(params: {
 
           // If no matching lead, but has applyUrl or applyEmail
           if (!matched && (post.applyUrl || post.applyEmail)) {
+            const matchInfo = isRoleMatchingProfile(post.title, profile);
             leads.push({
               id: crypto.randomUUID(),
               kind: post.applyUrl ? 'url' : 'email',
@@ -429,8 +472,8 @@ export async function buildLeads(params: {
               verdict: 'job',
               note: mat.visual
                 ? 'Read from an image. Check the address before applying.'
-                : undefined,
-              selected: true
+                : matchInfo.reason,
+              selected: matchInfo.matches
             });
           } else if (!matched && !post.applyUrl && !post.applyEmail) {
             // Instructions only posting

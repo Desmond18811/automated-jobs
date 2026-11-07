@@ -117,15 +117,19 @@ globalThis.fetch = async (
         };
       }
       if (f.options && Array.isArray(f.options) && f.options.length > 0) {
+        const validOpts = f.options.filter(
+          (o: any) => typeof o === 'string' && !o.toLowerCase().includes('select')
+        );
+        const opt = validOpts.length > 0 ? validOpts[0] : f.options[0];
         if (f.type === 'checkboxes') {
-          return { id, value: [f.options[0]] };
+          return { id, value: [opt], needsHuman: false, reason: '' };
         }
-        return { id, value: f.options[0] };
+        return { id, value: opt, needsHuman: false, reason: '' };
       }
       if (f.type === 'checkbox') {
-        return { id, value: false };
+        return { id, value: false, needsHuman: false, reason: '' };
       }
-      return { id, value: 'Test answer' };
+      return { id, value: 'Test answer', needsHuman: false, reason: '' };
     });
 
     text = JSON.stringify({ answers });
