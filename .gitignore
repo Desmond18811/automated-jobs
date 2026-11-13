@@ -1,5 +1,218 @@
-node_modules
-server/data
+# ==============================================================================
+# J.A.V.I Root .gitignore
+# Prevents sensitive files, local configs, environments, builds, and runtime data
+# from being committed or pushed to GitHub / main.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. ENVIRONMENT VARIABLES & SECRETS (CRITICAL - NEVER COMMIT)
+# ------------------------------------------------------------------------------
+# All .env files across root and all subdirectories
+.env
+.env.*
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+.env.staging.local
+._env
+.netlify.env
+
+# Explicit subfolder protection
 server/.env
-web/dist
+server/.env.*
+web/.env
+web/.env.*
+
+# ALLOW example and template files to be committed for onboarding
+!.env.example
+!**/.env.example
+!.env.template
+!**/.env.template
+
+# Secret Keys, Private Keys, Certificates, and Credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+*.pkcs12
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.secret
+secret.json
+secrets.json
+credentials.json
+client_secret*.json
+service-account*.json
+token.json
+tokens.json
+jwt.key
+jwt.pub
+
+# ------------------------------------------------------------------------------
+# 2. DEPENDENCIES & PACKAGE MANAGERS
+# ------------------------------------------------------------------------------
+node_modules/
+*/node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.yarn-integrity
+.pnpm-store/
+
+# ------------------------------------------------------------------------------
+# 3. BUILD ARTIFACTS & PRODUCTION COMPILATION OUTPUTS
+# ------------------------------------------------------------------------------
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+server/dist/
+web/dist/
+.next/
+.nuxt/
+.output/
+.vuepress/dist/
+.serverless/
+storybook-static/
+*.tsbuildinfo
+
+# ------------------------------------------------------------------------------
+# 4. DATABASES, LOCAL STORAGE, RUNTIME DATA & UPLOADS
+# ------------------------------------------------------------------------------
+data/
+**/data/
+server/data/
+storage/
+**/storage/
+server/storage/
+uploads/
+**/uploads/
+downloads/
+**/downloads/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# SQLite, DB files & logs
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.dynamodb/
+
+# ------------------------------------------------------------------------------
+# 5. BROWSER AUTOMATION & PLAYWRIGHT ARTIFACTS
+# ------------------------------------------------------------------------------
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+server/browsers/
+userData/
+puppeteer-profile/
+session/
+sessions/
+*.har
+
+# ------------------------------------------------------------------------------
+# 6. LOGS & DIAGNOSTICS
+# ------------------------------------------------------------------------------
+logs/
+**/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+.node_repl_history
+
+# ------------------------------------------------------------------------------
+# 7. TESTING & CODE COVERAGE
+# ------------------------------------------------------------------------------
+coverage/
+**/coverage/
+.nyc_output/
+*.lcov
+
+# ------------------------------------------------------------------------------
+# 8. CACHES
+# ------------------------------------------------------------------------------
+.cache/
+**/.cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.fusebox/
+.parcel-cache/
+.turbo/
+.vite/
+**/.vite/
+.npm
+
+# ------------------------------------------------------------------------------
+# 9. OPERATING SYSTEM ARTIFACTS
+# ------------------------------------------------------------------------------
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+[Tt]humbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------------------------------------------------
+# 10. IDE & EDITOR SETTINGS
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+.tern-port
+.vscode-test/
+
+# ------------------------------------------------------------------------------
+# 11. TEMPORARY & ARCHIVE FILES
+# ------------------------------------------------------------------------------
+tmp/
+temp/
+**/tmp/
+**/temp/
+*.tgz
+*.tar.gz
+*.zip
+*.7z
+*.rar

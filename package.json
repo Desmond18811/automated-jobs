@@ -1,5 +1,5 @@
 {
-  "name": "job-autopilot",
+  "name": "J.A.V.I",
   "private": true,
   "devDependencies": {
     "concurrently": "^9.1.2"

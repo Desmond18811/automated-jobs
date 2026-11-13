@@ -1,0 +1,63 @@
+# ==============================================================================
+# J.A.V.I Web / Frontend .gitignore
+# ==============================================================================
+
+# Secrets and environment files
+.env
+.env.*
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging.local
+._env
+
+# Allow example files
+!.env.example
+!.env.template
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build & Compilation outputs
+dist/
+build/
+out/
+storybook-static/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# Caches
+.cache/
+.vite/
+.eslintcache
+.prettiercache
+.turbo/
+
+# System and OS files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+tmp/
+temp/
