@@ -1,467 +1,524 @@
-import { useState, type FC } from 'react';
-import { ExternalLinkIcon } from '@/assets/icons';
+import { useEffect, useState, type FC } from 'react';
+import { CheckIcon, ExternalLinkIcon, RefreshCwIcon } from '@/assets/icons';
+import { tasksApi } from '@/api';
+
+interface Task {
+  _id: string;
+  id?: string;
+  reason: string;
+  message: string;
+  status: string;
+  questions?: Array<{
+    key: string;
+    label: string;
+    type: string;
+    options?: string[];
+    required?: boolean;
+    isSalary?: boolean;
+  }>;
+  payload?: {
+    company?: string;
+    role?: string;
+    url?: string;
+    pageUrl?: string;
+    [key: string]: any;
+  };
+  createdAt?: string;
+}
 
 export const NeedsYouView: FC = () => {
-  const [stripeAnswer, setStripeAnswer] = useState('');
-  const [saveToBank, setSaveToBank] = useState(true);
-  const [resolved, setResolved] = useState<Record<string, boolean>>({});
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [answers, setAnswers] = useState<Record<string, Record<string, string>>>({});
+  const [saveToBank, setSaveToBank] = useState<Record<string, boolean>>({});
+  const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
 
-  const markResolved = (id: string) => {
-    setResolved((prev) => ({ ...prev, [id]: true }));
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const loadTasks = async () => {
+    try {
+      setLoading(true);
+      const res = await tasksApi.list();
+      const list = Array.isArray(res) ? res : res?.items || res?.tasks || [];
+      setTasks(list.filter((t: any) => t.status === 'open'));
+    } catch (e: any) {
+      console.warn('Could not load tasks from API:', e?.message);
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  const handleFieldChange = (taskId: string, fieldKey: string, val: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [taskId]: {
+        ...(prev[taskId] || {}),
+        [fieldKey]: val,
+      },
+    }));
+  };
+
+  const handleToggleBank = (taskId: string, checked: boolean) => {
+    setSaveToBank((prev) => ({ ...prev, [taskId]: checked }));
+  };
+
+  const handleAnswer = async (task: Task) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    setSubmitting((prev) => ({ ...prev, [id]: true }));
+
+    const taskAnswers = answers[id] || {};
+    const defaultAnswer = Object.values(taskAnswers)[0] || '';
+    const shouldRemember = saveToBank[id] !== false; // default true
+
+    try {
+      await tasksApi.answer(id, {
+        answers: taskAnswers,
+        remember: { default: shouldRemember },
+      } as any);
+      showToast('Answer submitted! J.A.V.I has resumed this application.');
+      setTasks((prev) => prev.filter((t) => (t._id || t.id) !== id));
+    } catch (err: any) {
+      showToast('Failed to submit answer: ' + (err?.message || 'Server error'));
+    } finally {
+      setSubmitting((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleMarkDone = async (task: Task) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    setSubmitting((prev) => ({ ...prev, [id]: true }));
+    try {
+      await tasksApi.markDone(id);
+      showToast('Task marked as completed!');
+      setTasks((prev) => prev.filter((t) => (t._id || t.id) !== id));
+    } catch (err: any) {
+      showToast('Could not complete task: ' + (err?.message || 'Server error'));
+    } finally {
+      setSubmitting((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleRetry = async (task: Task) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    setSubmitting((prev) => ({ ...prev, [id]: true }));
+    try {
+      await tasksApi.retry(id);
+      showToast('Retrying application submission...');
+      setTasks((prev) => prev.filter((t) => (t._id || t.id) !== id));
+    } catch (err: any) {
+      showToast('Retry error: ' + (err?.message || 'Server error'));
+    } finally {
+      setSubmitting((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleDismiss = async (task: Task) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    setSubmitting((prev) => ({ ...prev, [id]: true }));
+    try {
+      await tasksApi.dismiss(id);
+      showToast('Task dismissed.');
+      setTasks((prev) => prev.filter((t) => (t._id || t.id) !== id));
+    } catch (err: any) {
+      showToast('Could not dismiss task: ' + (err?.message || 'Server error'));
+    } finally {
+      setSubmitting((prev) => ({ ...prev, [id]: false }));
+    }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, letterSpacing: '-.5px' }}>Needs you</h2>
-        <p style={{ margin: 0, fontSize: 12, color: '#6a6a72' }}>
-          Sends Javi couldn't finish alone. Answer once and Javi remembers it.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Item 1: Stripe Form Question */}
-        {!resolved.stripe && (
-          <div
-            style={{
-              background: '#fff',
-              border: '1px solid #eef0f4',
-              borderRadius: 14,
-              padding: 18,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              boxShadow: '0 1px 3px rgba(0,0,0,.02)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: '#6366f1',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  S
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>
-                    Stripe — <span style={{ fontWeight: 600, color: '#4b5563' }}>Senior Product Designer</span>
-                  </span>
-                  <span style={{ fontSize: 10.5, color: '#8a8a92' }}>Greenhouse form · paused at question 6 of 8</span>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: '#c2410c',
-                  background: '#fff7ed',
-                  border: '1px solid #fed7aa',
-                  borderRadius: 999,
-                  padding: '3px 9px',
-                }}
-              >
-                Answer needed
-              </span>
-            </div>
-
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
-              "Are you able to overlap with Pacific time two days a week?"
-            </div>
-
-            <textarea
-              rows={3}
-              value={stripeAnswer}
-              onChange={(e) => setStripeAnswer(e.target.value)}
-              placeholder="Your answer..."
-              style={{
-                width: '100%',
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
-                padding: '10px 12px',
-                fontSize: 12.5,
-                outline: 'none',
-                fontFamily: 'Montserrat, sans-serif',
-                boxSizing: 'border-box',
-              }}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: '#4b5563', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={saveToBank}
-                  onChange={(e) => setSaveToBank(e.target.checked)}
-                />
-                Save to my answer bank for similar questions
-              </label>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => markResolved('stripe')}
-                  style={{
-                    background: 'transparent',
-                    border: 0,
-                    color: '#6b7280',
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Skip job
-                </button>
-                <button
-                  type="button"
-                  onClick={() => markResolved('stripe')}
-                  style={{
-                    background: '#2563eb',
-                    border: 0,
-                    color: '#fff',
-                    borderRadius: 8,
-                    padding: '8px 16px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Answer &amp; resume send
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Item 2: Monzo Captcha Failed */}
-        {!resolved.monzo && (
-          <div
-            style={{
-              background: '#fff',
-              border: '1px solid #eef0f4',
-              borderRadius: 14,
-              padding: 18,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              boxShadow: '0 1px 3px rgba(0,0,0,.02)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: '#f97316',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  M
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>
-                    Monzo — <span style={{ fontWeight: 600, color: '#4b5563' }}>Design Systems Lead</span>
-                  </span>
-                  <span style={{ fontSize: 10.5, color: '#8a8a92' }}>Lever form · attempt 2 of 3</span>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: '#b91c1c',
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  borderRadius: 999,
-                  padding: '3px 9px',
-                }}
-              >
-                Retry or dismiss
-              </span>
-            </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 760, paddingBottom: 40 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, letterSpacing: '-.5px' }}>Needs you</h2>
+          <p style={{ margin: 0, fontSize: 12, color: '#6a6a72' }}>
+            Sends J.A.V.I couldn't finish autonomously. Answer once, and J.A.V.I will remember your answer for future applications.
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {toast && (
             <div
               style={{
-                background: '#fef2f2',
-                border: '1px solid #fee2e2',
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                color: '#065f46',
                 borderRadius: 8,
-                padding: '9px 12px',
-                fontSize: 12,
-                color: '#dc2626',
+                padding: '6px 12px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
-              The form showed a captcha Javi can't solve.
+              <CheckIcon size={14} color="#059669" />
+              <span>{toast}</span>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => markResolved('monzo')}
-                style={{
-                  background: '#f3f4f6',
-                  border: '1px solid #e5e7eb',
-                  color: '#374151',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                Dismiss
-              </button>
-              <button
-                type="button"
-                onClick={() => markResolved('monzo')}
-                style={{
-                  background: '#2563eb',
-                  border: 0,
-                  color: '#fff',
-                  borderRadius: 8,
-                  padding: '8px 16px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Retry send
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Item 3: Figma LinkedIn Apply */}
-        {!resolved.figma && (
-          <div
+          )}
+          <button
+            type="button"
+            onClick={loadTasks}
+            disabled={loading}
             style={{
-              background: '#fff',
-              border: '1px solid #eef0f4',
-              borderRadius: 14,
-              padding: 18,
               display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              boxShadow: '0 1px 3px rgba(0,0,0,.02)',
+              alignItems: 'center',
+              gap: 6,
+              background: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: '#374151',
+              cursor: loading ? 'wait' : 'pointer',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: '#0ea5e9',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  F
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>
-                    Figma — <span style={{ fontWeight: 600, color: '#4b5563' }}>Product Designer, Editor</span>
-                  </span>
-                  <span style={{ fontSize: 10.5, color: '#8a8a92' }}>LinkedIn Easy Apply</span>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: '#1d4ed8',
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  borderRadius: 999,
-                  padding: '3px 9px',
-                }}
-              >
-                Manual
-              </span>
-            </div>
+            <RefreshCwIcon size={12} color="#374151" />
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+      </div>
 
-            <p style={{ margin: 0, fontSize: 12, color: '#4b5563' }}>
-              This platform doesn't allow automated applying. Your tailored CV and letter are ready to copy.
+      {loading && tasks.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 14,
+            padding: '36px 20px',
+            textAlign: 'center',
+            border: '1px solid #eef0f4',
+            color: '#6b7280',
+            fontSize: 12,
+          }}
+        >
+          Loading tasks that need your attention...
+        </div>
+      ) : tasks.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            border: '1px solid #eef0f4',
+            borderRadius: 14,
+            padding: '48px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            boxShadow: '0 1px 3px rgba(0,0,0,.02)',
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: '#ecfdf5',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CheckIcon size={24} color="#059669" />
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#111827' }}>
+              All caught up! J.A.V.I needs nothing from you.
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280', maxWidth: 440 }}>
+              Whenever an application requires a custom question not found in your profile, encounters a CAPTCHA, or hits a login wall, it will be safely paused and listed here for quick resolution.
             </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => window.open('https://linkedin.com', '_blank')}
-                style={{
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  color: '#1d4ed8',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                Open on LinkedIn <ExternalLinkIcon size={12} color="#1d4ed8" />
-              </button>
-              <button
-                type="button"
-                onClick={() => markResolved('figma')}
-                style={{
-                  background: '#0b0b0c',
-                  border: 0,
-                  color: '#fff',
-                  borderRadius: 8,
-                  padding: '8px 16px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                I applied — mark done
-              </button>
-            </div>
           </div>
-        )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {tasks.map((task) => {
+            const taskId = task._id || task.id || '';
+            const isSubmitting = Boolean(submitting[taskId]);
+            const companyName = task.payload?.company || 'Target Company';
+            const roleName = task.payload?.role || 'Job Application';
+            const url = task.payload?.url || task.payload?.pageUrl;
 
-        {/* Item 4: Linear Assisted Draft */}
-        {!resolved.linear && (
-          <div
-            style={{
-              background: '#fff',
-              border: '1px solid #eef0f4',
-              borderRadius: 14,
-              padding: 18,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              boxShadow: '0 1px 3px rgba(0,0,0,.02)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: '#8b5cf6',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  L
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>
-                    Linear — <span style={{ fontWeight: 600, color: '#4b5563' }}>Product Designer</span>
+            // Reason metadata badge
+            let badgeText = 'Answer needed';
+            let badgeBg = '#fff7ed';
+            let badgeColor = '#c2410c';
+            let badgeBorder = '#fed7aa';
+
+            if (task.reason === 'captcha') {
+              badgeText = 'CAPTCHA Challenge';
+              badgeBg = '#fef2f2';
+              badgeColor = '#dc2626';
+              badgeBorder = '#fecaca';
+            } else if (task.reason === 'login_wall') {
+              badgeText = 'Login required';
+              badgeBg = '#eff6ff';
+              badgeColor = '#2563eb';
+              badgeBorder = '#bfdbfe';
+            } else if (task.reason === 'assisted_platform') {
+              badgeText = 'Assisted Apply';
+              badgeBg = '#f5f3ff';
+              badgeColor = '#7c3aed';
+              badgeBorder = '#ddd6fe';
+            }
+
+            const questions = task.questions && task.questions.length > 0
+              ? task.questions
+              : [{ key: 'default', label: task.message || 'Please provide information for this application', type: 'textarea', required: true }];
+
+            return (
+              <div
+                key={taskId}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #eef0f4',
+                  borderRadius: 14,
+                  padding: 18,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  boxShadow: '0 1px 3px rgba(0,0,0,.02)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 8,
+                        background: '#111827',
+                        color: '#fff',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {companyName.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: '#111827' }}>
+                        {companyName} — <span style={{ fontWeight: 600, color: '#4b5563' }}>{roleName}</span>
+                      </span>
+                      <span style={{ fontSize: 11, color: '#8a8a92' }}>
+                        {task.message || 'Paused waiting for human confirmation'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      color: badgeColor,
+                      background: badgeBg,
+                      border: `1px solid ${badgeBorder}`,
+                      borderRadius: 999,
+                      padding: '3px 10px',
+                    }}
+                  >
+                    {badgeText}
                   </span>
-                  <span style={{ fontSize: 10.5, color: '#8a8a92' }}>Assisted draft · email to hiring manager</span>
+                </div>
+
+                {/* Specific reason body */}
+                {task.reason === 'captcha' && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 8, padding: '12px 14px', fontSize: 12, color: '#991b1b' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>ATS Protection Triggered</div>
+                    A CAPTCHA check appeared during submission. Please open the link below in your browser, solve the verification challenge, then click "Mark Solved" to complete submission.
+                  </div>
+                )}
+
+                {task.reason === 'login_wall' && (
+                  <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, padding: '12px 14px', fontSize: 12, color: '#1e40af' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Candidate Portal Account Required</div>
+                    This employer's ATS requires creating or signing into a candidate account before submitting. Please log in through the application link.
+                  </div>
+                )}
+
+                {url && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 11.5,
+                        color: '#2563eb',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      Open job application page <ExternalLinkIcon size={12} color="#2563eb" />
+                    </a>
+                  </div>
+                )}
+
+                {/* Render questions if present */}
+                {task.reason !== 'captcha' && task.reason !== 'login_wall' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {questions.map((q) => {
+                      const curVal = answers[taskId]?.[q.key] || '';
+                      return (
+                        <div key={q.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: '#1f2937' }}>
+                            "{q.label}"
+                          </label>
+
+                          {q.options && q.options.length > 0 ? (
+                            <select
+                              value={curVal}
+                              onChange={(e) => handleFieldChange(taskId, q.key, e.target.value)}
+                              style={{
+                                height: 38,
+                                border: '1px solid #e5e7eb',
+                                borderRadius: 8,
+                                padding: '0 10px',
+                                fontSize: 12,
+                                background: '#fff',
+                                fontFamily: 'Montserrat, sans-serif',
+                              }}
+                            >
+                              <option value="">Select an option...</option>
+                              {q.options.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <textarea
+                              rows={2}
+                              value={curVal}
+                              onChange={(e) => handleFieldChange(taskId, q.key, e.target.value)}
+                              placeholder="Your answer..."
+                              style={{
+                                width: '100%',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: 8,
+                                padding: '8px 12px',
+                                fontSize: 12,
+                                outline: 'none',
+                                fontFamily: 'Montserrat, sans-serif',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: '#4b5563', cursor: 'pointer', marginTop: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={saveToBank[taskId] !== false}
+                        onChange={(e) => handleToggleBank(taskId, e.target.checked)}
+                        style={{ accentColor: '#2563eb' }}
+                      />
+                      Save to my answer bank for similar questions in future applications
+                    </label>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleDismiss(task)}
+                    disabled={isSubmitting}
+                    style={{
+                      background: 'transparent',
+                      border: 0,
+                      color: '#6b7280',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: isSubmitting ? 'wait' : 'pointer',
+                      padding: '6px 12px',
+                    }}
+                  >
+                    Dismiss
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRetry(task)}
+                    disabled={isSubmitting}
+                    style={{
+                      background: '#f3f4f6',
+                      border: '1px solid #e5e7eb',
+                      color: '#374151',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      borderRadius: 8,
+                      cursor: isSubmitting ? 'wait' : 'pointer',
+                      padding: '6px 14px',
+                    }}
+                  >
+                    Retry
+                  </button>
+
+                  {task.reason === 'captcha' || task.reason === 'login_wall' || task.reason === 'assisted_platform' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkDone(task)}
+                      disabled={isSubmitting}
+                      style={{
+                        background: '#0b0b0c',
+                        border: 0,
+                        color: '#fff',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '6px 16px',
+                        cursor: isSubmitting ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {isSubmitting ? 'Processing...' : 'Mark Completed'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleAnswer(task)}
+                      disabled={isSubmitting}
+                      style={{
+                        background: '#2563eb',
+                        border: 0,
+                        color: '#fff',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '6px 16px',
+                        cursor: isSubmitting ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Save & Submit'}
+                    </button>
+                  )}
                 </div>
               </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: '#065f46',
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  borderRadius: 999,
-                  padding: '3px 9px',
-                }}
-              >
-                Ready to send
-              </span>
-            </div>
-
-            <div
-              style={{
-                background: '#f9fafb',
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
-                padding: '10px 14px',
-                fontSize: 12,
-                color: '#374151',
-                lineHeight: '18px',
-              }}
-            >
-              Hi Karri — I've been using Linear daily for two years and led the design system at Paystack. I'd love to talk about the Product Designer role...
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => markResolved('linear')}
-                style={{
-                  background: 'transparent',
-                  border: 0,
-                  color: '#6b7280',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                Dismiss
-              </button>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText("Hi Karri — I've been using Linear daily...")}
-                style={{
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  color: '#2563eb',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Copy draft
-              </button>
-              <button
-                type="button"
-                onClick={() => markResolved('linear')}
-                style={{
-                  background: '#0b0b0c',
-                  border: 0,
-                  color: '#fff',
-                  borderRadius: 8,
-                  padding: '8px 16px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                I sent it — mark done
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

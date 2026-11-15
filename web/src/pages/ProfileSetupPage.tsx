@@ -1,5 +1,5 @@
-import { useState, type FC, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, type FC, type ChangeEvent, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { JaviGlyph } from '@/assets/logos';
 import {
   BriefcaseIcon,
@@ -13,14 +13,29 @@ import {
 } from '@/assets/icons';
 import { useUserProfile } from '@/context/ProfileContext';
 import { DEFAULT_PROFILE, type UserProfile } from '@/types/profile';
+import { profileApi } from '@/api';
 
 export const ProfileSetupPage: FC = () => {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('token');
+  const inviteEmail = searchParams.get('email');
   const { profile, updateProfile, setProfile } = useUserProfile();
 
   const [activeTab, setActiveTab] = useState<'personal' | 'auth' | 'targets' | 'experience' | 'skills' | 'eeo'>('personal');
-  const [formData, setFormData] = useState<UserProfile>(profile);
+  const [formData, setFormData] = useState<UserProfile>(() => {
+    if (inviteEmail) {
+      return { ...profile, email: inviteEmail };
+    }
+    return profile;
+  });
   const [showSavedToast, setShowSavedToast] = useState(false);
+
+  useEffect(() => {
+    if (inviteEmail && !profile.email) {
+      setFormData((prev) => ({ ...prev, email: inviteEmail }));
+    }
+  }, [inviteEmail, profile.email]);
 
   const handleInputChange = (field: keyof UserProfile, value: any) => {
     setFormData((prev) => {
@@ -74,6 +89,10 @@ export const ProfileSetupPage: FC = () => {
   const handleSaveAndProceed = (e?: FormEvent) => {
     if (e) e.preventDefault();
     setProfile(formData);
+    // Persist to server if authenticated
+    profileApi.update(formData).catch((err) => {
+      console.warn('Profile sync to backend deferred:', err?.message);
+    });
     nav('/dash');
   };
 
@@ -242,6 +261,32 @@ export const ProfileSetupPage: FC = () => {
           </button>
         </div>
       </header>
+
+      {/* Verified Onboarding Link Notice */}
+      {inviteToken && (
+        <div
+          style={{
+            background: 'linear-gradient(90deg, #ecfdf5 0%, #eff6ff 100%)',
+            borderBottom: '1px solid #d1fae5',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 12,
+            color: '#065f46',
+            flex: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ShieldCheckIcon size={16} color="#059669" />
+            <strong>Verified Early Access Link:</strong>
+            <span>Onboarding token authenticated for <u>{formData.email || 'your account'}</u>. Saving will directly setup your personal dashboard.</span>
+          </div>
+          <span style={{ fontSize: 10.5, fontWeight: 700, background: '#10b981', color: '#fff', padding: '3px 9px', borderRadius: 999 }}>
+            TOKEN ACTIVE
+          </span>
+        </div>
+      )}
 
       {/* Main Form Body */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>

@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState, type FC, type ReactNode } from 'react';
-import { DEFAULT_PROFILE, type UserProfile } from '@/types/profile';
+import { EMPTY_PROFILE, DEFAULT_PROFILE, type UserProfile } from '@/types/profile';
+import { profileApi } from '@/api';
 
 interface ProfileContextType {
   profile: UserProfile;
   setProfile: (profile: UserProfile | ((prev: UserProfile) => UserProfile)) => void;
   updateProfile: (partial: Partial<UserProfile>) => void;
+  refreshProfile: () => Promise<void>;
   resetToDefault: () => void;
 }
 
@@ -17,13 +19,35 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return { ...DEFAULT_PROFILE, ...JSON.parse(stored) };
+        return { ...EMPTY_PROFILE, ...JSON.parse(stored) };
       }
     } catch (err) {
       console.warn('Could not load profile from localStorage', err);
     }
-    return DEFAULT_PROFILE;
+    return EMPTY_PROFILE;
   });
+
+  const refreshProfile = async () => {
+    try {
+      const res = await profileApi.get();
+      const data = res?.profile || res;
+      if (data && (data.email || data.fullName || data.firstName || data.headline || data.targetRoles?.length)) {
+        setProfileState((prev) => {
+          const merged = { ...prev, ...data };
+          if (data.firstName || data.lastName) {
+            merged.fullName = `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.fullName || prev.fullName;
+          }
+          return merged;
+        });
+      }
+    } catch {
+      // Unauthenticated or offline: keep local state
+    }
+  };
+
+  useEffect(() => {
+    refreshProfile();
+  }, []);
 
   useEffect(() => {
     try {
@@ -50,7 +74,7 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   return (
-    <ProfileContext.Provider value={{ profile, setProfile: setProfileState, updateProfile, resetToDefault }}>
+    <ProfileContext.Provider value={{ profile, setProfile: setProfileState, updateProfile, refreshProfile, resetToDefault }}>
       {children}
     </ProfileContext.Provider>
   );

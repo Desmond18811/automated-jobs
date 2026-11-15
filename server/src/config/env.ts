@@ -16,7 +16,10 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   APP_URL: z.string().url().default('http://localhost:5173'),
   API_URL: z.string().url().default('http://localhost:4000'),
-  MONGO_URI: z.string().min(1, 'MONGO_URI is required'),
+  MONGO_URI: z
+    .string()
+    .default(() => process.env.MONGO_URI || process.env.MONGODB_URI || '')
+    .refine((v) => v.length > 0, 'MONGO_URI or MONGODB_URI is required'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   STORAGE_DIR: z.string().default('./storage'),
 

@@ -58,6 +58,7 @@ export interface UserProfile {
   pronouns?: string;
   address: Address;
   location: string;
+  avatarUrl?: string;
 
   // Online Presence & Socials
   linkedinUrl: string;
@@ -96,6 +97,66 @@ export interface UserProfile {
   // Voluntary EEO Disclosures
   eeo: EeoDisclosures;
 }
+
+export const EMPTY_PROFILE: UserProfile = {
+  firstName: '',
+  lastName: '',
+  fullName: '',
+  headline: '',
+  email: '',
+  phone: '',
+  pronouns: '',
+  address: {
+    street: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  },
+  location: '',
+
+  linkedinUrl: '',
+  githubUrl: '',
+  portfolioUrl: '',
+  twitterUrl: '',
+
+  workAuthorization: 'authorized',
+  requiresSponsorship: false,
+  futureSponsorship: false,
+  securityClearance: 'none',
+  willingToRelocate: false,
+  noticePeriod: '',
+  earliestStartDate: '',
+
+  targetRoles: [],
+  locations: [],
+  remotePreference: 'remote',
+  salaryExpectation: {
+    minimum: 0,
+    currency: 'USD',
+    period: 'year',
+    negotiable: true,
+  },
+  yearsOfExperience: 0,
+  currentCompany: '',
+  currentTitle: '',
+
+  summary: '',
+  elevatorPitch: '',
+  highestEducationLevel: 'bachelor',
+  primarySkills: [],
+  secondarySkills: [],
+  toolsAndFrameworks: [],
+  experience: [],
+  education: [],
+
+  eeo: {
+    gender: 'decline',
+    raceEthnicity: 'decline',
+    veteranStatus: 'decline',
+    disabilityStatus: 'decline',
+  },
+};
 
 export const DEFAULT_PROFILE: UserProfile = {
   firstName: 'Ada',

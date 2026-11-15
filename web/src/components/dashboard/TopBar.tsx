@@ -1,13 +1,46 @@
-import type { FC } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { JaviGlyph } from '@/assets/logos';
 import { BellIcon } from '@/assets/icons';
 import { AVATAR_ADA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
+import { notificationsApi } from '@/api';
+import { useSocket } from '@/hooks/useSocket';
+import { NotificationPopup } from './NotificationPopup';
+import type { DashboardTab } from './Sidebar';
 
-export const TopBar: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
+interface TopBarProps {
+  onOpenSettings?: () => void;
+  onSelectTab?: (tab: DashboardTab) => void;
+}
+
+export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
   const nav = useNavigate();
   const { profile } = useUserProfile();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const refreshUnreadCount = async () => {
+    try {
+      const res = await notificationsApi.getUnreadCount();
+      if (typeof res?.unreadCount === 'number') {
+        setUnreadCount(res.unreadCount);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  useEffect(() => {
+    refreshUnreadCount();
+  }, []);
+
+  // Real-time updates via Socket
+  useSocket({
+    onNotificationNew: () => {
+      setUnreadCount((prev) => prev + 1);
+    },
+  });
 
   return (
     <div
@@ -21,7 +54,8 @@ export const TopBar: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) 
         background: '#fff',
         height: 60,
         boxSizing: 'border-box',
-        zIndex: 5,
+        zIndex: 50,
+        position: 'relative',
       }}
     >
       <Link
@@ -73,34 +107,57 @@ export const TopBar: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
         <span style={{ fontSize: 11.5, fontWeight: 500, color: '#3a3a40', cursor: 'pointer' }}>Eng (US) ▾</span>
 
-        {/* Proper Bell Icon */}
-        <div
-          title="Notifications"
-          style={{
-            position: 'relative',
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: '#f6f7f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'background 0.15s ease',
-          }}
-        >
-          <BellIcon size={16} color="#3a3a40" />
-          <span
+        {/* Bell Icon & Notification Popup */}
+        <div style={{ position: 'relative' }}>
+          <div
+            title="Notifications"
+            onClick={() => setShowNotifications(!showNotifications)}
             style={{
-              position: 'absolute',
-              top: 5,
-              right: 6,
-              width: 7,
-              height: 7,
+              position: 'relative',
+              width: 34,
+              height: 34,
               borderRadius: '50%',
-              background: '#ef4444',
-              border: '1.5px solid #fff',
+              background: showNotifications ? '#edf3ff' : '#f6f7f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              border: `1px solid ${showNotifications ? '#bfdbfe' : 'transparent'}`,
             }}
+          >
+            <BellIcon size={16} color={showNotifications ? '#2563eb' : '#3a3a40'} />
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 3,
+                  right: 3,
+                  minWidth: 14,
+                  height: 14,
+                  padding: '0 3px',
+                  borderRadius: 999,
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: '1.5px solid #fff',
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
+
+          <NotificationPopup
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+            onSelectTab={onSelectTab}
+            onUnreadCountChange={setUnreadCount}
           />
         </div>
 
@@ -110,13 +167,14 @@ export const TopBar: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) 
           title="Account profile"
         >
           <img
-            src={AVATAR_ADA}
+            src={profile.avatarUrl || AVATAR_ADA}
             alt={profile.fullName}
             style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }}
           />
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Ada'} ▾</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Candidate'} ▾</span>
         </div>
       </div>
     </div>
   );
 };
+

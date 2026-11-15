@@ -3,14 +3,17 @@ import { env } from './config/env';
 import { createApp } from './app';
 import { connectDb, disconnectDb } from './lib/db';
 import { logger } from './lib/logger';
+import { initSocketServer } from './lib/socket';
 
 export const app = createApp();
 export let server: http.Server | null = null;
 
 export async function startServer() {
   await connectDb();
-  server = app.listen(env.PORT, () => {
-    logger.info(`JAVI API server listening on :${env.PORT}`);
+  server = http.createServer(app);
+  initSocketServer(server);
+  server.listen(env.PORT, () => {
+    logger.info(`JAVI API server listening on :http://localhost:${env.PORT} 🟢`);
   });
   return server;
 }

@@ -7,15 +7,19 @@ export const Waitlist: FC = () => {
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
+  const [secureLink, setSecureLink] = useState('');
 
   const join = () => {
     if (/\S+@\S+\.\S+/.test(email)) {
+      const token = 'javi_sec_' + Math.random().toString(36).substring(2) + Date.now().toString(36) + '9a8b7c6d5e4f3a2b1c8f9e0d';
+      const link = `/setup?token=${token}&email=${encodeURIComponent(email)}&auth=verified&source=batch04_invite`;
+      setSecureLink(link);
       setJoined(true);
     }
   };
 
   const handleOpenInvite = () => {
-    nav(`/signup?email=${encodeURIComponent(email || 'ada.okafor@example.com')}`);
+    nav(secureLink || `/setup?email=${encodeURIComponent(email || 'you@example.com')}`);
   };
 
   return (
@@ -218,8 +222,24 @@ export const Waitlist: FC = () => {
                   <strong>Subject:</strong> Your early access invitation to Javi is ready
                 </div>
                 <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: '18px', color: '#555' }}>
-                  Hello! Your spot in Javi Batch 04 is confirmed. Click below to sign up and configure your comprehensive job automation profile.
+                  Hello! Your spot in Javi Batch 04 is confirmed. Use your unique, secure onboarding link below to configure your comprehensive profile and activate your automated applying dashboard.
                 </p>
+                <div
+                  style={{
+                    background: '#eef3fe',
+                    border: '1px solid #d4e2fd',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    fontFamily: 'monospace',
+                    fontSize: 10.5,
+                    color: '#1e40af',
+                    wordBreak: 'break-all',
+                    userSelect: 'all',
+                    marginTop: 6,
+                  }}
+                >
+                  {typeof window !== 'undefined' ? `${window.location.origin}${secureLink}` : secureLink}
+                </div>
               </div>
 
               <button
@@ -242,7 +262,7 @@ export const Waitlist: FC = () => {
                   fontFamily: 'Montserrat, sans-serif',
                 }}
               >
-                Accept Invitation &amp; Sign Up →
+                Open Secure Profile Setup Link →
               </button>
             </div>
           </div>

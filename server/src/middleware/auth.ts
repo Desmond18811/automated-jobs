@@ -12,17 +12,52 @@ declare global {
   }
 }
 
-export const requireAuth: RequestHandler = (req, _res, next) => {
+let clerkClientInstance: any = null;
+
+async function getClerkClient() {
+  if (clerkClientInstance) return clerkClientInstance;
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) return null;
+  try {
+    const { createClerkClient } = await import('@clerk/backend');
+    clerkClientInstance = createClerkClient({ secretKey });
+    return clerkClientInstance;
+  } catch {
+    return null;
+  }
+}
+
+export const requireAuth: RequestHandler = async (req, _res, next) => {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return next(new AppError(401, 'Missing access token'));
+  const token = header.slice(7);
+
+  // 1. Try local J.A.V.I JWT verification
   try {
-    const payload = jwt.verify(header.slice(7), env.JWT_ACCESS_SECRET, { audience: 'javi-api' }) as jwt.JwtPayload;
-    if (!payload.sub) throw new Error('missing subject');
-    req.userId = payload.sub;
-    next();
+    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, { audience: 'javi-api' }) as jwt.JwtPayload;
+    if (payload.sub) {
+      req.userId = payload.sub;
+      return next();
+    }
   } catch {
-    next(new AppError(401, 'Invalid or expired access token'));
+    // Token may be a Clerk session token
   }
+
+  // 2. Dual-Verification: Verify Clerk token if CLERK_SECRET_KEY is configured
+  const clerk = await getClerkClient();
+  if (clerk) {
+    try {
+      const verified = await clerk.verifyToken(token);
+      if (verified?.sub) {
+        req.userId = verified.sub;
+        return next();
+      }
+    } catch {
+      // Not a valid Clerk token
+    }
+  }
+
+  next(new AppError(401, 'Invalid or expired access token'));
 };
 
 export function currentUser(req: Request): string {

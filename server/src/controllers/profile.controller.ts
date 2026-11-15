@@ -9,8 +9,9 @@ import { isValidTimeZone } from '../lib/time';
 import { currentUser } from '../middleware/auth';
 import { Application } from '../models/application.model';
 import { Profile } from '../models/profile.model';
-import { enqueueGenerate } from '../queues';
-import { detectAts } from '../sources/ats';
+import { enqueueGenerate, queues, defaultJobOpts } from '../queues';
+import { detectAts, greenhouse, lever, ashby } from '../sources/ats';
+import { extractJobFromUrl, upsertJob } from '../services/job.service';
 import { CV_MIME, extractText, parseCv } from '../services/documents/cvParser';
 import { llmEnabled } from '../services/documents/llm';
 
@@ -165,7 +166,8 @@ export class ProfileController {
 
   static async updateProfile(req: Request, res: Response) {
     const userId = currentUser(req);
-    const body = parseBody(UpdateProfileSchema, req.body);
+    const raw = req.body?.profile && typeof req.body.profile === 'object' ? req.body.profile : req.body;
+    const body = parseBody(UpdateProfileSchema, raw);
     const profile = await loadProfile(userId);
 
     if (body.rules?.approvalMode === 'auto' && profile.rules.approvalMode !== 'auto') {
@@ -214,26 +216,58 @@ export class ProfileController {
   }
 
   static async addCareerPage(req: Request, res: Response) {
+    const userId = currentUser(req);
     const { url } = parseBody(z.object({ url: z.string().url() }), req.body);
     await assertPublicUrl(url);
-    const profile = await loadProfile(currentUser(req));
+    const profile = await loadProfile(userId);
     const detected = detectAts(url);
     if (!profile.careerPages.some((c) => c.url === url)) {
       profile.careerPages.push({ url, ats: detected.ats, token: detected.token, addedAt: new Date() });
       await profile.save();
     }
+
+    // Immediately scrape / read jobs from the newly watched career page
+    let jobsIngested = 0;
+    try {
+      let rawJobs: any[] = [];
+      if (detected.ats === 'greenhouse' && detected.token) {
+        rawJobs = await greenhouse(detected.token).fetch();
+      } else if (detected.ats === 'lever' && detected.token) {
+        rawJobs = await lever(detected.token).fetch();
+      } else if (detected.ats === 'ashby' && detected.token) {
+        rawJobs = await ashby(detected.token).fetch();
+      } else {
+        const single = await extractJobFromUrl(url).catch(() => null);
+        if (single?.title && single?.company) {
+          rawJobs = [{ ...single, source: 'career_page', url, postedAt: new Date() }];
+        }
+      }
+
+      for (const rj of rawJobs) {
+        const saved = await upsertJob(rj).catch(() => null);
+        if (saved?.isNew) {
+          jobsIngested++;
+          await queues.match.add('match', { jobId: saved.job.id, userId }, defaultJobOpts).catch(() => null);
+        }
+      }
+    } catch (err) {
+      console.warn('Initial career page crawl warning:', err);
+    }
+
     res.status(201).json({
       ...detected,
+      jobsIngested,
       note: detected.ats === 'unsupported'
-        ? 'Saved, but this page is not on a supported job board yet. Paste individual job links with "Add a job" for now.'
-        : `Found a ${detected.ats} job board. New roles there will be checked on every scan.`,
+        ? (jobsIngested > 0 ? `Scraped 1 job posting from this link.` : 'Saved page. New postings will be monitored on regular scans.')
+        : `Connected ${detected.ats} board. Ingested ${jobsIngested} open roles and queued match processing.`,
     });
   }
 
   static async removeCareerPage(req: Request, res: Response) {
-    const { url } = parseBody(z.object({ url: z.string() }), req.query);
+    const rawUrl = String(req.body?.url || req.query?.url || '').trim();
+    if (!rawUrl) throw new AppError(400, 'Career page URL is required');
     const profile = await loadProfile(currentUser(req));
-    profile.careerPages = profile.careerPages.filter((c) => c.url !== url);
+    profile.careerPages = profile.careerPages.filter((c) => c.url !== rawUrl && !rawUrl.includes(c.url));
     await profile.save();
     res.status(204).end();
   }

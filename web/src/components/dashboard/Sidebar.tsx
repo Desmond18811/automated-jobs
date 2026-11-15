@@ -1,4 +1,19 @@
-import type { FC } from 'react';
+import { useState, useRef, useEffect, type FC, type ReactNode } from 'react';
+import {
+  BriefcaseIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  LogOutIcon,
+  RepeatIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+  TargetIcon,
+  UserIcon,
+  ZapIcon,
+} from '@/assets/icons';
+import { AVATAR_ADA } from '@/assets/avatars';
+import { useUserProfile } from '@/context/ProfileContext';
+import { authApi } from '@/api';
 
 export type DashboardTab =
   | 'dashboard'
@@ -20,17 +35,56 @@ interface SidebarProps {
 export const Sidebar: FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
-  needsYouCount = 4,
-  draftsCount = 3,
+  needsYouCount = 0,
+  draftsCount = 0,
 }) => {
-  const NAV_ITEMS: { key: DashboardTab; label: string; badge?: number; tag?: string }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'needs_you', label: 'Needs you', badge: needsYouCount },
-    { key: 'job_feed', label: 'Job feed' },
-    { key: 'drafts', label: 'Drafts', badge: draftsCount },
-    { key: 'tracker', label: 'Tracker' },
-    { key: 'cv_profile', label: 'CV & profile' },
-    { key: 'business_mode', label: 'Business mode', tag: 'Phase 7' },
+  const { profile } = useUserProfile();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const displayName =
+    profile.fullName ||
+    [profile.firstName, profile.lastName].filter(Boolean).join(' ') ||
+    'Angelica Greeze';
+  const displayEmail = profile.email || 'candidate@javi.ai';
+  const candidateRole = profile.headline || profile.targetRoles?.[0] || 'UI / UX Designer';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen]);
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      window.location.href = '/signin';
+    }
+  };
+
+  const handleCopyEmail = () => {
+    navigator.clipboard?.writeText(displayEmail);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const NAV_ITEMS: { key: DashboardTab; label: string; icon: ReactNode; badge?: number }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: <TargetIcon size={15} /> },
+    { key: 'needs_you', label: 'Needs you', icon: <ZapIcon size={15} />, badge: needsYouCount > 0 ? needsYouCount : undefined },
+    { key: 'job_feed', label: 'Job feed', icon: <BriefcaseIcon size={15} /> },
+    { key: 'drafts', label: 'Drafts', icon: <FileTextIcon size={15} />, badge: draftsCount > 0 ? draftsCount : undefined },
+    { key: 'tracker', label: 'Tracker', icon: <RepeatIcon size={15} /> },
+    { key: 'cv_profile', label: 'CV & profile', icon: <UserIcon size={15} /> },
+    { key: 'business_mode', label: 'Business mode', icon: <ShieldCheckIcon size={15} /> },
   ];
 
   return (
@@ -69,7 +123,12 @@ export const Sidebar: FC<SidebarProps> = ({
               transition: 'all 0.15s ease',
             }}
           >
-            <span>{item.label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ color: isActive ? '#2f6ef0' : '#8a8a92', display: 'flex', alignItems: 'center' }}>
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+            </div>
             {item.badge !== undefined && (
               <span
                 style={{
@@ -86,21 +145,6 @@ export const Sidebar: FC<SidebarProps> = ({
                 }}
               >
                 {item.badge}
-              </span>
-            )}
-            {item.tag && (
-              <span
-                style={{
-                  fontSize: 8.5,
-                  fontWeight: 600,
-                  color: '#6b7280',
-                  border: '1px dashed #d1d5db',
-                  borderRadius: 999,
-                  padding: '1px 6px',
-                  background: '#f9fafb',
-                }}
-              >
-                {item.tag}
               </span>
             )}
           </div>
@@ -127,58 +171,221 @@ export const Sidebar: FC<SidebarProps> = ({
           transition: 'all 0.15s ease',
         }}
       >
-        Settings
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ color: activeTab === 'settings' ? '#2f6ef0' : '#8a8a92', display: 'flex', alignItems: 'center' }}>
+            <SparklesIcon size={15} />
+          </span>
+          <span>Settings</span>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 'auto',
-          background: '#f6f7f9',
-          borderRadius: 14,
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          alignItems: 'center',
-          textAlign: 'center',
-        }}
-      >
-        <span
+      {/* User Account Card with Dropdown (Replaces 18/30 Days Pro Trial) */}
+      <div ref={dropdownRef} style={{ marginTop: 'auto', position: 'relative' }}>
+        {dropdownOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 8px)',
+              left: 0,
+              width: '100%',
+              background: '#fff',
+              border: '1px solid #e7e8ec',
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              padding: '6px',
+              zIndex: 9999,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            <div style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f3', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <img
+                src={profile.avatarUrl || AVATAR_ADA}
+                alt={displayName}
+                style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid #e4e4e7', flexShrink: 0 }}
+              />
+              <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1a1a1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayName}
+                </div>
+                <div style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {candidateRole}
+                </div>
+                <div
+                  style={{
+                    fontSize: 9.5,
+                    color: '#71717a',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {displayEmail}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTab('settings');
+                setDropdownOpen(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '7px 10px',
+                borderRadius: 7,
+                fontSize: 11.5,
+                fontWeight: 500,
+                color: '#3f3f46',
+                background: 'transparent',
+                border: 0,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f4f4f5')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <UserIcon size={14} color="#71717a" />
+              Settings
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyEmail}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '7px 10px',
+                borderRadius: 7,
+                fontSize: 11.5,
+                fontWeight: 500,
+                color: '#3f3f46',
+                background: 'transparent',
+                border: 0,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f4f4f5')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <FileTextIcon size={14} color="#71717a" />
+              {copied ? 'Email copied!' : 'Copy email'}
+            </button>
+
+            <div style={{ height: 1, background: '#f0f0f3', margin: '2px 0' }} />
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '7px 10px',
+                borderRadius: 7,
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: '#dc2626',
+                background: 'transparent',
+                border: 0,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#fee2e2')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <LogOutIcon size={14} color="#dc2626" />
+              Log out
+            </button>
+          </div>
+        )}
+
+        <div
+          onClick={() => setDropdownOpen(!dropdownOpen)}
           style={{
-            fontSize: 9.5,
-            fontWeight: 700,
-            color: '#fff',
-            background: 'linear-gradient(90deg,#3d6ef5,#14b8a6)',
-            borderRadius: 999,
-            padding: '3px 8px',
-          }}
-        >
-          Pro trial
-        </span>
-        <div style={{ fontSize: 22, fontWeight: 800, color: '#2f6ef0', letterSpacing: '-.6px' }}>
-          18<span style={{ fontSize: 13, color: '#55555c' }}>/30 days</span>
-        </div>
-        <span style={{ fontSize: 10.5, color: '#6a6a72' }}>Upgrade to keep auto-applying</span>
-        <button
-          type="button"
-          style={{
-            marginTop: 4,
-            width: '100%',
-            height: 32,
-            borderRadius: 9,
-            background: '#0b0b0c',
-            color: '#fff',
-            fontSize: 11.5,
-            fontWeight: 600,
+            background: dropdownOpen ? '#edf3ff' : '#f8f9fb',
+            border: `1px solid ${dropdownOpen ? '#2f6ef0' : '#e6e7ec'}`,
+            borderRadius: 12,
+            padding: '10px 10px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            border: 0,
+            justifyContent: 'space-between',
+            gap: 8,
             cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            userSelect: 'none',
           }}
         >
-          Upgrade
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                background: '#fff',
+                border: '1.5px solid #dbeafe',
+                overflow: 'hidden',
+                flexShrink: 0,
+                boxShadow: '0 2px 6px rgba(47,110,240,0.18)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <img
+                src={profile.avatarUrl || AVATAR_ADA}
+                alt={displayName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <span
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: '#18181b',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {displayName}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  color: '#2563eb',
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {candidateRole}
+              </span>
+            </div>
+          </div>
+
+          <span
+            style={{
+              color: '#8a8a92',
+              transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <ChevronDownIcon size={14} />
+          </span>
+        </div>
       </div>
     </aside>
   );

@@ -8,9 +8,12 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.12",
+    "maplibre-gl": "^6.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.5"
+    "react-router-dom": "^7.18.5",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

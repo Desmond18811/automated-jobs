@@ -15,9 +15,16 @@ export class TaskController {
   }
 
   static async answer(req: Request, res: Response) {
+    const rawAnswers = req.body?.answers
+      ? req.body.answers
+      : (req.body?.answer !== undefined ? { default: String(req.body.answer) } : {});
+    const rawRemember = req.body?.remember
+      ? req.body.remember
+      : (req.body?.saveToBank !== undefined ? { default: Boolean(req.body.saveToBank) } : undefined);
+
     const b = parseBody(
       z.object({ answers: z.record(z.string().max(5000)), remember: z.record(z.boolean()).optional() }),
-      req.body,
+      { answers: rawAnswers, remember: rawRemember },
     );
     res.json(await answerTask(currentUser(req), req.params.id, b.answers, b.remember));
   }

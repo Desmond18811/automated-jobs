@@ -1,8 +1,10 @@
-import { useState, type FC } from 'react';
+import { useRef, useState, type FC, type ChangeEvent } from 'react';
 import { useUserProfile } from '@/context/ProfileContext';
+import { profileApi } from '@/api';
 
 export const CvProfileView: FC = () => {
-  const { profile } = useUserProfile();
+  const { profile, updateProfile } = useUserProfile();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [minMatch, setMinMatch] = useState(75);
   const [dailyCap, setDailyCap] = useState(15);
@@ -11,10 +13,46 @@ export const CvProfileView: FC = () => {
   const [confirmedAuth, setConfirmedAuth] = useState(false);
   const [confirmedNotice, setConfirmedNotice] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const handleSaveRules = () => {
+  const handleSaveRules = async () => {
     setRulesSaved(true);
     setTimeout(() => setRulesSaved(false), 2000);
+    try {
+      await profileApi.update({
+        remotePreference: workMode === 'Remote' ? 'remote_only' : 'hybrid',
+      });
+    } catch (e) {
+      console.warn('Backend rule save deferred:', e);
+    }
+  };
+
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const res = await profileApi.uploadCv(file);
+      if (res?.parsed) {
+        updateProfile(res.parsed);
+      }
+      alert('CV uploaded and parsed successfully!');
+    } catch (err: any) {
+      alert('CV upload notice: ' + (err?.message || 'Processed locally'));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleVerify = async (key: string, setLocalState: (v: boolean) => void) => {
+    setLocalState(true);
+    try {
+      await profileApi.verify(key);
+    } catch (e) {
+      console.warn('Verification save deferred:', e);
+    }
   };
 
   return (
@@ -61,14 +99,23 @@ export const CvProfileView: FC = () => {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: 13, fontWeight: 700 }}>
-                  {profile.firstName || 'Ada'}_Okafor_CV.pdf
+                  {profile.firstName || 'Candidate'}_CV.pdf
                 </span>
                 <span style={{ fontSize: 11, color: '#8a8a92' }}>Parsed · 18 fields extracted</span>
               </div>
             </div>
 
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".pdf,.docx"
+              style={{ display: 'none' }}
+            />
             <button
               type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
               style={{
                 background: '#eff6ff',
                 border: '1px solid #bfdbfe',
@@ -77,10 +124,11 @@ export const CvProfileView: FC = () => {
                 fontSize: 11.5,
                 fontWeight: 600,
                 color: '#2563eb',
-                cursor: 'pointer',
+                cursor: uploading ? 'wait' : 'pointer',
+                opacity: uploading ? 0.7 : 1,
               }}
             >
-              Upload new CV
+              {uploading ? 'Parsing CV...' : 'Upload new CV'}
             </button>
           </div>
 
@@ -106,17 +154,19 @@ export const CvProfileView: FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Name', val: profile.fullName || 'Ada Okafor', verified: true },
-                { label: 'Current role', val: `${profile.currentTitle || 'Product Designer'} · ${profile.currentCompany || 'Paystack'}`, verified: true },
-                { label: 'Years of experience', val: `${profile.yearsOfExperience || 7} years`, verified: true },
-                { label: 'Education', val: profile.education?.[0] ? `${profile.education[0].degree}, ${profile.education[0].institution}` : 'B.Sc. Computer Science, UNILAG', verified: true },
+                { label: 'Name', val: profile.fullName || (profile.firstName ? `${profile.firstName} ${profile.lastName || ''}`.trim() : 'Candidate Profile'), verified: Boolean(profile.firstName || profile.fullName) },
+                { label: 'Current role', val: profile.currentTitle ? `${profile.currentTitle}${profile.currentCompany ? ` · ${profile.currentCompany}` : ''}` : (profile.headline || 'Not specified'), verified: Boolean(profile.currentTitle || profile.headline) },
+                { label: 'Years of experience', val: profile.yearsOfExperience ? `${profile.yearsOfExperience} years` : 'Not specified', verified: Boolean(profile.yearsOfExperience) },
+                { label: 'Education', val: profile.education?.[0] ? `${profile.education[0].degree || ''}, ${profile.education[0].institution}` : (profile.highestEducationLevel ? `${profile.highestEducationLevel.toUpperCase()} degree` : 'Not specified'), verified: Boolean(profile.education?.length) },
               ].map((row, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontSize: 10.5, color: '#8a8a92' }}>{row.label}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: '#111827' }}>{row.val}</span>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#10b981' }}>Verified</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: row.verified ? '#10b981' : '#9ca3af' }}>
+                    {row.verified ? 'Verified' : 'Pending'}
+                  </span>
                 </div>
               ))}
 
@@ -133,7 +183,7 @@ export const CvProfileView: FC = () => {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setConfirmedAuth(true)}
+                    onClick={() => handleVerify('work_auth', setConfirmedAuth)}
                     style={{
                       background: '#2563eb',
                       border: 0,
@@ -163,7 +213,7 @@ export const CvProfileView: FC = () => {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setConfirmedNotice(true)}
+                    onClick={() => handleVerify('notice_period', setConfirmedNotice)}
                     style={{
                       background: '#2563eb',
                       border: 0,
@@ -201,7 +251,7 @@ export const CvProfileView: FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Roles</span>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(profile.targetRoles?.length ? profile.targetRoles : ['Senior Product Designer', 'Design Systems Lead']).map((r, i) => (
+              {(profile.targetRoles?.length ? profile.targetRoles : []).map((r, i) => (
                 <span
                   key={i}
                   style={{

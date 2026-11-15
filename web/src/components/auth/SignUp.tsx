@@ -1,8 +1,10 @@
-import { useState, type FC, type ChangeEvent } from 'react';
+import { useState, type FC, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GoogleLogo, JaviGlyph, LinkedInLogo } from '@/assets/logos';
-import { CheckIcon } from '@/assets/icons';
+import { GoogleLogo, LinkedInLogo } from '@/assets/logos';
+import { EyeIcon, EyeOffIcon } from '@/assets/icons';
+import { AuthSlideshow } from './AuthSlideshow';
 import { useUserProfile } from '@/context/ProfileContext';
+import { authApi } from '@/api';
 
 export const SignUp: FC = () => {
   const nav = useNavigate();
@@ -10,20 +12,38 @@ export const SignUp: FC = () => {
   const initialEmail = searchParams.get('email') || '';
   const { updateProfile } = useUserProfile();
 
-  const [firstName, setFirstName] = useState('Ada');
-  const [lastName, setLastName] = useState('Okafor');
-  const [email, setEmail] = useState(initialEmail || 'ada.okafor@example.com');
-  const [password, setPassword] = useState('••••••••••••');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState(initialEmail || 'you@example.com');
+  const [password, setPassword] = useState('password123');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
-    updateProfile({
-      firstName,
-      lastName,
-      fullName: `${firstName} ${lastName}`.trim(),
-      email,
-    });
-    nav('/setup');
+    setError(null);
+    setLoading(true);
+
+    try {
+      await authApi.register({
+        email,
+        password,
+        name: `${firstName} ${lastName}`.trim(),
+      });
+      updateProfile({
+        firstName,
+        lastName,
+        fullName: `${firstName} ${lastName}`.trim(),
+        email,
+      });
+      nav('/setup');
+    } catch (err: any) {
+      console.warn('Register attempt:', err);
+      setError(err?.message || 'Registration failed. Please check your details.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -53,102 +73,8 @@ export const SignUp: FC = () => {
           boxShadow: '0 24px 60px rgba(40,80,160,.12)',
         }}
       >
-        {/* Left gradient side */}
-        <div
-          style={{
-            position: 'relative',
-            padding: 36,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            background: 'linear-gradient(120deg,#3d6ef5 0%,#2b8fe0 50%,#14b8a6 100%)',
-            color: '#fff',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: 'radial-gradient(rgba(255,255,255,.35) 1px,transparent 1.2px)',
-              backgroundSize: '16px 16px',
-              opacity: 0.5,
-              pointerEvents: 'none',
-            }}
-          />
-          <div
-            style={{
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: '-.3px',
-            }}
-          >
-            <JaviGlyph size={18} color="#fff" />
-            Javi
-          </div>
-
-          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div
-              style={{
-                background: 'rgba(255,255,255,.14)',
-                border: '1px solid rgba(255,255,255,.22)',
-                borderRadius: 14,
-                padding: 16,
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <div style={{ fontSize: 11, opacity: 0.85, marginBottom: 4 }}>Early Access Spot Verified</div>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-.5px' }}>
-                Join Batch 04 Today
-              </div>
-              <div style={{ fontSize: 11.5, opacity: 0.85, marginTop: 4 }}>
-                Instant ATS parsing · Workday, Greenhouse &amp; Lever integration
-              </div>
-            </div>
-
-            <p style={{ margin: 0, fontSize: 13, lineHeight: '20px', opacity: 0.9 }}>
-              "Configure your comprehensive profile once. Javi monitors open roles, customizes your application materials, and applies while you rest."
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: 12,
-                }}
-              >
-                <CheckIcon size={16} color="#fff" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', fontSize: 11 }}>
-                <span style={{ fontWeight: 600 }}>Zero repetitive forms</span>
-                <span style={{ opacity: 0.75 }}>Full platform support</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              position: 'relative',
-              fontSize: 11,
-              opacity: 0.7,
-              display: 'flex',
-              justifyContent: 'space-between',
-            }}
-          >
-            <span>End-to-End Encryption</span>
-            <span>Step 1 of 2: Create Account</span>
-          </div>
-        </div>
+        {/* Left gradient side with interactive candidate stories slideshow */}
+        <AuthSlideshow />
 
         {/* Right form side */}
         <div
@@ -232,6 +158,22 @@ export const SignUp: FC = () => {
             <div style={{ flex: 1, height: 1, background: '#eee' }} />
           </div>
 
+          {error && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: 11.5,
+                lineHeight: '16px',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -296,26 +238,53 @@ export const SignUp: FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Password *</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-                placeholder="Choose a password"
-                style={{
-                  height: 36,
-                  border: '1px solid #e6e6ea',
-                  borderRadius: 8,
-                  padding: '0 10px',
-                  fontSize: 12.5,
-                  outline: 'none',
-                  fontFamily: 'Montserrat, sans-serif',
-                }}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                  placeholder="Choose a password"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    height: 36,
+                    border: '1px solid #e6e6ea',
+                    borderRadius: 8,
+                    padding: '0 36px 0 10px',
+                    fontSize: 12.5,
+                    outline: 'none',
+                    fontFamily: 'Montserrat, sans-serif',
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: showPassword ? '#2f6ef0' : '#8e8e93',
+                  }}
+                >
+                  {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                </button>
+              </div>
             </div>
 
             <button
               type="submit"
+              disabled={loading}
               style={{
                 height: 42,
                 background: '#0b0b0c',
@@ -324,13 +293,14 @@ export const SignUp: FC = () => {
                 border: 0,
                 fontSize: 12.5,
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: loading ? 'wait' : 'pointer',
                 marginTop: 6,
                 boxShadow: '0 4px 14px rgba(0,0,0,.12)',
                 fontFamily: 'Montserrat, sans-serif',
+                opacity: loading ? 0.7 : 1,
               }}
             >
-              Continue to Extensive Profile Setup →
+              {loading ? 'Creating account...' : 'Continue to Extensive Profile Setup →'}
             </button>
           </form>
 

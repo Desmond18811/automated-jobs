@@ -37,10 +37,12 @@ export async function register(email: string, password: string, name?: string): 
 
 export async function login(email: string, password: string): Promise<Tokens> {
   const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) throw new AppError(401, 'Wrong email or password');
+  if (!user) throw new
+    AppError(404, 'No email or password found for this user');
+  if (!(await bcrypt.compare(password, user.passwordHash)))
+    throw new AppError(401, 'Wrong Password');
   return issueTokens(user.id);
 }
-
 /** Rotation with reuse detection: presenting an already-rotated token revokes the whole family. */
 export async function rotate(refreshToken: string): Promise<Tokens> {
   const doc = await RefreshToken.findOne({ tokenHash: sha256(refreshToken) });

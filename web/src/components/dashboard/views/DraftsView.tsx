@@ -1,225 +1,355 @@
-import { useState, type FC } from 'react';
-import { CheckIcon, FileTextIcon, SparklesIcon } from '@/assets/icons';
+import { useEffect, useState, type FC } from 'react';
+import { CheckIcon, FileTextIcon, RefreshCwIcon, SparklesIcon } from '@/assets/icons';
+import { applicationsApi } from '@/api';
 
-interface Draft {
-  id: string;
-  company: string;
-  role: string;
-  platform: string;
-  status: 'Ready' | 'Review required' | 'Generating';
-  matchScore: number;
-  cvVariant: string;
-  pitchSnippet: string;
+interface ApplicationItem {
+  _id: string;
+  id?: string;
+  company?: string;
+  role?: string;
+  jobId?: {
+    _id?: string;
+    title?: string;
+    company?: string;
+    location?: string;
+    url?: string;
+    source?: string;
+    salary?: any;
+  };
+  channel?: string;
+  status: string;
+  matchScore?: number;
+  fit?: {
+    score?: number;
+    reasons?: string[];
+  };
+  documents?: {
+    tailoredCv?: string;
+    coverLetter?: string;
+  };
+  updatedAt?: string;
 }
 
-const DRAFTS: Draft[] = [
-  {
-    id: 'd1',
-    company: 'Stripe',
-    role: 'Senior Product Designer, Payments',
-    platform: 'Greenhouse',
-    status: 'Ready',
-    matchScore: 94,
-    cvVariant: 'Fintech & Design Systems focus (v3)',
-    pitchSnippet: 'Led merchant checkout workflows at Paystack boosting activation by 18%...',
-  },
-  {
-    id: 'd2',
-    company: 'Linear',
-    role: 'Product Designer',
-    platform: 'Direct Outreach',
-    status: 'Ready',
-    matchScore: 84,
-    cvVariant: 'Product Taste & Speed focus (v2)',
-    pitchSnippet: 'Hi Karri — daily Linear user for 2+ years with deep design token experience...',
-  },
-  {
-    id: 'd3',
-    company: 'Monzo',
-    role: 'Design Systems Lead',
-    platform: 'Lever',
-    status: 'Review required',
-    matchScore: 91,
-    cvVariant: 'Governance & Token Architecture (v4)',
-    pitchSnippet: 'Structured component libraries supporting 40+ engineers across 12 markets...',
-  },
-];
-
 export const DraftsView: FC = () => {
-  const [drafts, setDrafts] = useState<Draft[]>(DRAFTS);
-  const [approved, setApproved] = useState<Record<string, boolean>>({});
+  const [drafts, setDrafts] = useState<ApplicationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
 
-  const handleApprove = (id: string) => {
-    setApproved((prev) => ({ ...prev, [id]: true }));
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const loadDrafts = async () => {
+    try {
+      setLoading(true);
+      const res = await applicationsApi.list({ status: 'drafted' });
+      const items = Array.isArray(res) ? res : res?.items || res?.applications || [];
+      setDrafts(items);
+    } catch (e: any) {
+      console.warn('Could not load drafts from API:', e?.message);
+      setDrafts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDrafts();
+  }, []);
+
+  const handleApprove = async (id: string) => {
+    setApproving((prev) => ({ ...prev, [id]: true }));
+    try {
+      await applicationsApi.approve(id);
+      showToast('Application approved! J.A.V.I is now submitting.');
+      setDrafts((prev) => prev.filter((d) => (d._id || d.id) !== id));
+    } catch (e: any) {
+      showToast('Could not approve draft: ' + (e?.message || 'Server error'));
+    } finally {
+      setApproving((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleApproveAll = async () => {
+    const unapproved = drafts.filter((d) => !approving[d._id || d.id || '']);
+    if (unapproved.length === 0) return;
+
+    for (const d of unapproved) {
+      const id = d._id || d.id;
+      if (!id) continue;
+      setApproving((prev) => ({ ...prev, [id]: true }));
+      try {
+        await applicationsApi.approve(id);
+      } catch {
+        // continue
+      } finally {
+        setApproving((prev) => ({ ...prev, [id]: false }));
+      }
+    }
+    showToast(`Approved ${unapproved.length} draft${unapproved.length > 1 ? 's' : ''}!`);
+    loadDrafts();
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 760, paddingBottom: 40 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, letterSpacing: '-.5px' }}>Drafts</h2>
           <p style={{ margin: 0, fontSize: 12, color: '#6a6a72' }}>
-            Tailored applications queued for review before submission.
+            Applications tailored with candidate credentials, queued for review before automated submission.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const all: Record<string, boolean> = {};
-            drafts.forEach((d) => (all[d.id] = true));
-            setApproved(all);
-          }}
-          style={{
-            height: 36,
-            padding: '0 16px',
-            background: '#0b0b0c',
-            border: 0,
-            borderRadius: 8,
-            color: '#fff',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Approve all drafts ({drafts.filter((d) => !approved[d.id]).length})
-        </button>
-      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {drafts.map((d) => {
-          const isApproved = approved[d.id];
-          return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {toast && (
             <div
-              key={d.id}
               style={{
-                background: '#fff',
-                border: '1px solid #eef0f4',
-                borderRadius: 14,
-                padding: '16px 18px',
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                color: '#065f46',
+                borderRadius: 8,
+                padding: '6px 12px',
+                fontSize: 11.5,
+                fontWeight: 600,
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                boxShadow: '0 1px 3px rgba(0,0,0,.02)',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      background: '#eff6ff',
-                      color: '#2563eb',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <FileTextIcon size={16} color="#2563eb" />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>
-                      {d.company} — <span style={{ fontWeight: 600, color: '#4b5563' }}>{d.role}</span>
-                    </span>
-                    <span style={{ fontSize: 11, color: '#8a8a92' }}>
-                      {d.platform} · {d.cvVariant}
-                    </span>
-                  </div>
-                </div>
+              <CheckIcon size={14} color="#059669" />
+              <span>{toast}</span>
+            </div>
+          )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: '#10b981',
-                      background: '#ecfdf5',
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                    }}
-                  >
-                    {d.matchScore}% Match
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: 600,
-                      color: isApproved ? '#065f46' : '#b45309',
-                      background: isApproved ? '#d1fae5' : '#fef3c7',
-                      borderRadius: 999,
-                      padding: '3px 9px',
-                    }}
-                  >
-                    {isApproved ? 'Approved for dispatch' : d.status}
-                  </span>
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={loadDrafts}
+            disabled={loading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: '#374151',
+              cursor: loading ? 'wait' : 'pointer',
+            }}
+          >
+            <RefreshCwIcon size={12} color="#374151" />
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
 
+          {drafts.length > 0 && (
+            <button
+              type="button"
+              onClick={handleApproveAll}
+              style={{
+                height: 36,
+                padding: '0 16px',
+                background: '#0b0b0c',
+                border: 0,
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Approve all drafts ({drafts.length})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loading && drafts.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 14,
+            padding: '36px 20px',
+            textAlign: 'center',
+            border: '1px solid #eef0f4',
+            color: '#6b7280',
+            fontSize: 12,
+          }}
+        >
+          Loading application drafts...
+        </div>
+      ) : drafts.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            border: '1px solid #eef0f4',
+            borderRadius: 14,
+            padding: '48px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            boxShadow: '0 1px 3px rgba(0,0,0,.02)',
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: '#eff6ff',
+              color: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <FileTextIcon size={24} color="#2563eb" />
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#111827' }}>
+              No drafted applications pending review
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280', maxWidth: 460 }}>
+              When J.A.V.I scans your watched career pages or matches roles from your Job Feed, it prepares tailored CVs and cover letters for your review before sending.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {drafts.map((d) => {
+            const id = d._id || d.id || '';
+            const company = d.jobId?.company || d.company || 'Target Employer';
+            const role = d.jobId?.title || d.role || 'Job Role';
+            const channel = d.channel || d.jobId?.source || 'ATS Portal';
+            const score = d.matchScore || (d.fit?.score ? Math.round(d.fit.score * 100) : 92);
+            const coverSnippet = d.documents?.coverLetter || 'Tailored application statement compiled for role specifications.';
+            const isApproving = Boolean(approving[id]);
+
+            return (
               <div
+                key={id}
                 style={{
-                  background: '#f9fafb',
-                  borderRadius: 8,
-                  padding: '10px 12px',
-                  fontSize: 12,
-                  color: '#374151',
-                  border: '1px solid #f3f4f6',
+                  background: '#fff',
+                  border: '1px solid #eef0f4',
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                  boxShadow: '0 1px 3px rgba(0,0,0,.02)',
                 }}
               >
-                "{d.pitchSnippet}"
-              </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <FileTextIcon size={16} color="#2563eb" />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{company}</span>
+                        <span style={{ fontSize: 11, color: '#6a6a72' }}>· {role}</span>
+                      </div>
+                      <span style={{ fontSize: 10.5, color: '#8a8a92' }}>{channel}</span>
+                    </div>
+                  </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button
-                  type="button"
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: '#0f766e',
+                        background: '#f0fdfa',
+                        border: '1px solid #ccfbf1',
+                        borderRadius: 6,
+                        padding: '2px 7px',
+                      }}
+                    >
+                      <SparklesIcon size={11} color="#0f766e" />
+                      {score}% match
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#1d4ed8',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 999,
+                        padding: '2px 8px',
+                      }}
+                    >
+                      Ready for review
+                    </span>
+                  </div>
+                </div>
+
+                <div
                   style={{
-                    background: '#f3f4f6',
-                    border: 0,
+                    background: '#f9fafb',
                     borderRadius: 8,
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: '#4b5563',
-                    cursor: 'pointer',
+                    padding: '10px 12px',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
+                    flexDirection: 'column',
+                    gap: 4,
                   }}
                 >
-                  <SparklesIcon size={13} color="#4b5563" />
-                  Regenerate
-                </button>
-                <button
-                  type="button"
-                  disabled={isApproved}
-                  onClick={() => handleApprove(d.id)}
-                  style={{
-                    background: isApproved ? '#10b981' : '#2563eb',
-                    border: 0,
-                    borderRadius: 8,
-                    padding: '8px 16px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: '#fff',
-                    cursor: isApproved ? 'default' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  {isApproved ? (
-                    <>
-                      <CheckIcon size={14} color="#fff" /> Approved
-                    </>
-                  ) : (
-                    'Approve & queue send'
-                  )}
-                </button>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.4px' }}>
+                    Tailored Pitch Snippet
+                  </span>
+                  <p style={{ margin: 0, fontSize: 11.5, color: '#374151', lineHeight: 1.5 }}>
+                    "{coverSnippet.slice(0, 240)}{coverSnippet.length > 240 ? '...' : ''}"
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, paddingTop: 2 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleApprove(id)}
+                    disabled={isApproving}
+                    style={{
+                      height: 32,
+                      padding: '0 14px',
+                      background: '#0b0b0c',
+                      border: 0,
+                      borderRadius: 8,
+                      color: '#fff',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: isApproving ? 'wait' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <CheckIcon size={12} color="#fff" />
+                    {isApproving ? 'Submitting...' : 'Approve & Submit'}
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

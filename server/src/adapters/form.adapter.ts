@@ -56,17 +56,79 @@ function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
   const p = ctx.profile;
   const text = `${f.label} ${f.name}`.toLowerCase();
   const [first = '', ...rest] = (p.fullName ?? '').split(/\s+/);
-  const link = (re: RegExp) => p.links.find((l) => re.test(l.label) || re.test(l.url))?.url;
-  if (f.tag === 'textarea' && /cover letter|why .*(join|work|interested)/.test(text)) return ctx.app.documents?.coverLetter;
-  if (/first.?name|given name/.test(text)) return first;
-  if (/last.?name|surname|family name/.test(text)) return rest.join(' ');
-  if (/full.?name|^name\b|your name/.test(text)) return p.fullName;
-  if (/e-?mail/.test(text)) return p.email;
-  if (/phone|mobile|telephone/.test(text)) return p.phone;
-  if (/linkedin/.test(text)) return link(/linkedin/i);
-  if (/github/.test(text)) return link(/github/i);
-  if (/portfolio|website|personal site/.test(text)) return link(/portfolio|website|site/i) ?? p.links[0]?.url;
-  if (/^(location|city)\b|current location|where are you based/.test(text)) return p.location;
+  const link = (re: RegExp) => p.links?.find((l) => re.test(l.label) || re.test(l.url))?.url;
+
+  // 1. Cover letter / why us / statement
+  if (f.tag === 'textarea' && /cover letter|why .*(join|work|interested)|statement|additional info/i.test(text)) {
+    return ctx.app.documents?.coverLetter || ctx.app.documents?.proposal;
+  }
+
+  // 2. Personal contact info
+  if (/first.?name|given name/i.test(text)) return p.firstName || first || undefined;
+  if (/last.?name|surname|family name/i.test(text)) return p.lastName || (rest.length ? rest.join(' ') : undefined);
+  if (/full.?name|^name\b|your name/i.test(text)) return p.fullName || (p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : undefined);
+  if (/e-?mail/i.test(text)) return p.email || undefined;
+  if (/phone|mobile|telephone/i.test(text)) return p.phone || undefined;
+
+  // 3. Socials & Portfolios
+  if (/linkedin/i.test(text)) return p.linkedinUrl || link(/linkedin/i) || undefined;
+  if (/github/i.test(text)) return p.githubUrl || link(/github/i) || undefined;
+  if (/portfolio|personal (site|website)|website/i.test(text)) return p.portfolioUrl || link(/portfolio|website|site/i) || p.links?.[0]?.url || undefined;
+  if (/twitter|x\.com/i.test(text)) return p.twitterUrl || link(/twitter|x\.com/i) || undefined;
+
+  // 4. Address & Location
+  if (/street (address)?|address line 1/i.test(text)) return p.address?.street || undefined;
+  if (/(zip|postal) code/i.test(text)) return p.address?.postalCode || undefined;
+  if (/^state\b|province|region/i.test(text)) return p.address?.state || undefined;
+  if (/^country\b/i.test(text)) return p.address?.country || undefined;
+  if (/^(location|city)\b|current location|where are you based|current city/i.test(text)) return p.address?.city || p.location || undefined;
+
+  // 5. Work authorization & Legal eligibility
+  if (/authorized to work|legal.*authoriz|right to work/i.test(text)) {
+    if (p.workAuthorization === 'authorized') return 'Yes';
+    if (p.workAuthorization === 'not_authorized') return 'No';
+    return undefined;
+  }
+  if (/require.*sponsor|visa sponsor/i.test(text)) {
+    if (p.requiresSponsorship !== undefined) return p.requiresSponsorship ? 'Yes' : 'No';
+    return undefined;
+  }
+  if (/security clearance/i.test(text)) {
+    if (p.securityClearance && p.securityClearance !== 'none') return p.securityClearance;
+    return 'None';
+  }
+
+  // 6. Availability & Notice
+  if (/start date|earliest.*start|when can you start/i.test(text)) return p.earliestStartDate || undefined;
+  if (/notice period|notice/i.test(text)) return p.noticePeriod || undefined;
+
+  // 7. Experience, current company & title
+  if (/years of (work )?experience|total experience/i.test(text)) {
+    return p.yearsOfExperience !== undefined ? String(p.yearsOfExperience) : undefined;
+  }
+  if (/current (job )?title|current role|present role/i.test(text)) return p.currentTitle || undefined;
+  if (/current (employer|company)|present company/i.test(text)) return p.currentCompany || undefined;
+
+  // 8. Education
+  if (/highest (level of )?education|education level|degree/i.test(text)) {
+    return p.highestEducationLevel || p.education?.[0]?.degree || undefined;
+  }
+  if (/university|college|school|institution/i.test(text)) {
+    return p.education?.[0]?.institution || undefined;
+  }
+
+  // 9. Compensation
+  if (SALARY_RE.test(text)) {
+    return p.salaryExpectation?.minimum ? String(p.salaryExpectation.minimum) : p.salaryFloor?.amount ? String(p.salaryFloor.amount) : undefined;
+  }
+
+  // 10. EEO voluntary disclosures
+  if (/gender|sex\b/i.test(text)) return p.eeo?.gender || undefined;
+  if (/veteran/i.test(text)) return p.eeo?.veteranStatus || undefined;
+  if (/disability/i.test(text)) return p.eeo?.disabilityStatus || undefined;
+  if (/race|ethnicity|hispanic/i.test(text)) return p.eeo?.raceEthnicity || undefined;
+
+  // Strict empty rule: if field not found in profile, return undefined (do NOT hallucinate)
   return undefined;
 }
 

@@ -5,7 +5,7 @@ import { AppError } from '../../lib/http';
 
 const client = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
 
-export const llmEnabled = (): boolean => client !== null;
+export const llmEnabled = (): boolean => client !== null && process.env.NODE_ENV !== 'test';
 
 export async function complete(opts: { system: string; prompt: string; maxTokens?: number }): Promise<string> {
   if (!client) throw new AppError(503, 'Text generation is not configured (set ANTHROPIC_API_KEY)');

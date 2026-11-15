@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
+import analyticsRoutes from './analytics.routes';
 import applicationRoutes from './application.routes';
 import authRoutes from './auth.routes';
+import businessRoutes from './business.routes';
 import gmailRoutes from './gmail.routes';
 import jobRoutes from './job.routes';
 import meRoutes from './me.routes';
@@ -22,12 +24,16 @@ apiRouter.use('/jobs', requireAuth, jobRoutes);
 apiRouter.use('/applications', requireAuth, applicationRoutes);
 apiRouter.use('/tasks', requireAuth, taskRoutes);
 apiRouter.use('/notifications', requireAuth, notificationRoutes);
+apiRouter.use('/business', requireAuth, businessRoutes);
+apiRouter.use('/analytics', requireAuth, analyticsRoutes);
 apiRouter.use('/me', requireAuth, meRoutes);
 
 export default apiRouter;
 export {
+  analyticsRoutes,
   applicationRoutes,
   authRoutes,
+  businessRoutes,
   gmailRoutes,
   jobRoutes,
   meRoutes,

@@ -2,14 +2,16 @@ import type { Request, Response, CookieOptions } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env';
 import { AppError, parseBody } from '../lib/http';
+import { currentUser } from '../middleware/auth';
+import { User } from '../models/user.model';
 import { login, logout, register, rotate, type Tokens } from '../services/auth.service';
 
 export const COOKIE = 'javi_rt';
 export const cookieOpts: CookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  path: '/api/auth',
+  sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  path: '/',
   maxAge: env.REFRESH_TOKEN_DAYS * 864e5,
 };
 
@@ -50,6 +52,13 @@ export class AuthController {
   static async logout(req: Request, res: Response) {
     const token = req.cookies?.[COOKIE];
     if (token) await logout(token);
-    res.clearCookie(COOKIE, { path: '/api/auth' }).status(204).end();
+    res.clearCookie(COOKIE, { path: '/' }).status(204).end();
+  }
+
+  static async me(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const user = await User.findById(userId).select('-passwordHash').lean();
+    if (!user) throw new AppError(404, 'User not found');
+    res.json({ id: user._id, email: user.email, name: user.name });
   }
 }

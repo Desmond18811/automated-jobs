@@ -3,41 +3,59 @@ import { useNavigate } from 'react-router-dom';
 import { AVATAR_ADA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
 
-export const ProfileCard: FC = () => {
+export const ProfileCard: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
   const nav = useNavigate();
   const { profile } = useUserProfile();
 
-  const expList = profile.experience?.length
+  const handleEditClick = () => {
+    if (onOpenSettings) {
+      onOpenSettings();
+    } else {
+      nav('/setup');
+    }
+  };
+
+  const expList = Array.isArray(profile.experience) && profile.experience.length > 0
     ? profile.experience.map((e, idx) => ({
         initial: (e.company || 'C').charAt(0).toUpperCase(),
         color: idx === 0 ? '#f97316' : '#3d6ef5',
         title: e.title,
-        meta: `${e.company} · ${e.start ? e.start.split('-')[0] : '2022'} – ${e.current ? 'Present' : e.end ? e.end.split('-')[0] : '2024'}`,
+        meta: `${e.company}${e.start ? ` · ${e.start.split('-')[0]}` : ''} – ${e.current ? 'Present' : e.end ? e.end.split('-')[0] : 'Past'}`,
       }))
-    : [
-        { initial: 'P', color: '#f97316', title: 'Product Designer', meta: 'Paystack · 2022 – Present' },
-        { initial: 'F', color: '#3d6ef5', title: 'UI Designer', meta: 'Flutterwave · 2019 – 2022' },
-      ];
+    : [];
 
-  const lookingForTags = [
-    ...(profile.targetRoles?.slice(0, 2) || ['Product Designer']),
-    profile.remotePreference === 'remote' ? 'Remote' : profile.remotePreference === 'hybrid' ? 'Hybrid' : 'Any',
-    profile.salaryExpectation?.minimum ? `$${Math.round(profile.salaryExpectation.minimum / 1000)}k+` : '$120k+',
-    'Fintech',
-    ...(profile.primarySkills?.slice(0, 2) || ['Figma']),
-  ];
+  const lookingForTags: string[] = [
+    ...(Array.isArray(profile.targetRoles) ? profile.targetRoles.slice(0, 3) : []),
+    profile.remotePreference ? (profile.remotePreference === 'remote' ? 'Remote' : profile.remotePreference === 'hybrid' ? 'Hybrid' : 'Any location') : '',
+    profile.salaryExpectation?.minimum ? `$${Math.round(profile.salaryExpectation.minimum / 1000)}k+` : '',
+    ...(Array.isArray(profile.primarySkills) ? profile.primarySkills.slice(0, 3) : []),
+  ].filter(Boolean);
 
-  const eligibilityTags = [
-    profile.workAuthorization === 'authorized' ? 'Work authorized' : 'Not authorized',
-    profile.requiresSponsorship ? 'Sponsorship needed' : 'No sponsorship required',
-    profile.noticePeriod || '2 weeks notice',
-    profile.willingToRelocate ? 'Open to relocate' : 'Local / remote only',
-    profile.highestEducationLevel === 'bachelor'
-      ? 'B.Sc. verified'
-      : profile.highestEducationLevel === 'master'
-      ? 'M.Sc. verified'
-      : 'Degree verified',
+  const eligibilityTags: string[] = [
+    profile.workAuthorization ? (profile.workAuthorization === 'authorized' ? 'Work authorized' : 'Not authorized') : '',
+    profile.requiresSponsorship !== undefined ? (profile.requiresSponsorship ? 'Sponsorship required' : 'No sponsorship needed') : '',
+    profile.noticePeriod ? `${profile.noticePeriod} notice` : '',
+    profile.willingToRelocate ? 'Open to relocate' : '',
+  ].filter(Boolean);
+
+  // Compute actual profile completeness
+  const criticalFields = [
+    profile.firstName,
+    profile.lastName,
+    profile.email,
+    profile.phone,
+    profile.headline,
+    profile.location,
+    profile.linkedinUrl,
+    profile.workAuthorization,
+    profile.summary,
+    profile.targetRoles?.length,
+    profile.primarySkills?.length,
   ];
+  const filledCount = criticalFields.filter(Boolean).length;
+  const completeness = Math.round((filledCount / criticalFields.length) * 100);
+
+  const displayName = profile.fullName || (profile.firstName ? `${profile.firstName} ${profile.lastName || ''}`.trim() : 'Candidate Profile');
 
   return (
     <aside
@@ -84,8 +102,8 @@ export const ProfileCard: FC = () => {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <img
-            src={AVATAR_ADA}
-            alt={profile.fullName}
+            src={profile.avatarUrl || AVATAR_ADA}
+            alt={displayName}
             style={{
               width: 64,
               height: 64,
@@ -97,7 +115,7 @@ export const ProfileCard: FC = () => {
           />
           <button
             type="button"
-            onClick={() => nav('/setup')}
+            onClick={handleEditClick}
             style={{
               fontSize: 11,
               fontWeight: 600,
@@ -114,9 +132,9 @@ export const ProfileCard: FC = () => {
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>{profile.fullName || 'Ada Okafor'}</span>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>{displayName}</span>
           <span style={{ fontSize: 11, color: '#8a8a92' }}>
-            {profile.headline || 'Product Designer'} · {profile.address?.city || 'Lagos'}, {profile.remotePreference === 'remote' ? 'remote' : profile.address?.country || 'Nigeria'}
+            {profile.headline || 'Active Candidate'} {profile.location ? `· ${profile.location}` : ''}
           </span>
         </div>
         <span
@@ -133,7 +151,7 @@ export const ProfileCard: FC = () => {
           ● Open to work
         </span>
 
-        {/* CV Card */}
+        {/* Profile Completeness Card */}
         <div
           style={{
             border: '1px solid #eef0f4',
@@ -144,131 +162,116 @@ export const ProfileCard: FC = () => {
             gap: 8,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              style={{
-                width: 30,
-                height: 36,
-                borderRadius: 5,
-                background: '#fdecec',
-                color: '#e04848',
-                fontSize: 8.5,
-                fontWeight: 800,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              PDF
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <span
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {profile.firstName || 'Ada'}_Okafor_CV.pdf
-              </span>
-              <span style={{ fontSize: 10, color: '#8a8a92' }}>Updated 2 days ago · 2 pages</span>
-            </div>
-            <span
-              onClick={() => nav('/setup')}
-              style={{ fontSize: 10.5, fontWeight: 600, color: '#2f6ef0', cursor: 'pointer' }}
-            >
-              Replace
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#6a6a72' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#6a6a72' }}>
             <span>Profile completeness</span>
-            <span style={{ fontWeight: 700, color: '#0b0b0c' }}>92%</span>
+            <span style={{ fontWeight: 700, color: '#0b0b0c' }}>{completeness}%</span>
           </div>
           <div style={{ height: 4, borderRadius: 4, background: '#eef0f4' }}>
             <div
               style={{
-                width: '92%',
+                width: `${completeness}%`,
                 height: 4,
                 borderRadius: 4,
                 background: 'linear-gradient(90deg,#3d6ef5,#14b8a6)',
+                transition: 'width 0.3s ease',
               }}
             />
           </div>
+          {completeness < 100 && (
+            <span
+              onClick={handleEditClick}
+              style={{ fontSize: 10, color: '#2563eb', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Complete remaining details in Settings ›
+            </span>
+          )}
         </div>
 
         {/* Experience */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 12.5, fontWeight: 700 }}>Experience</span>
-          {expList.map((e, idx) => (
-            <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  background: e.color,
-                  color: '#fff',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flex: 'none',
-                }}
-              >
-                {e.initial}
+          {expList.length === 0 ? (
+            <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>
+              No experience added yet. Update your profile in Settings.
+            </span>
+          ) : (
+            expList.map((e, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: e.color,
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: 'none',
+                  }}
+                >
+                  {e.initial}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600 }}>{e.title}</span>
+                  <span style={{ fontSize: 10, color: '#8a8a92' }}>{e.meta}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 600 }}>{e.title}</span>
-                <span style={{ fontSize: 10, color: '#8a8a92' }}>{e.meta}</span>
-              </div>
+            ))
+          )}
+        </div>
+
+        {/* Target Roles & Skills */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>Target Roles &amp; Skills</span>
+          {lookingForTags.length === 0 ? (
+            <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>
+              Add target roles and skills in Settings.
+            </span>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {lookingForTags.map((t, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    fontSize: 10.5,
+                    color: '#3a3a40',
+                    background: '#f4f5f8',
+                    borderRadius: 7,
+                    padding: '4px 9px',
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
             </div>
-          ))}
+          )}
         </div>
 
-        {/* Looking for */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700 }}>Looking for</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {lookingForTags.map((t, idx) => (
-              <span
-                key={idx}
-                style={{
-                  fontSize: 10.5,
-                  color: '#3a3a40',
-                  background: '#f4f5f8',
-                  borderRadius: 7,
-                  padding: '4px 9px',
-                }}
-              >
-                {t}
-              </span>
-            ))}
+        {/* Work Authorization & Legal */}
+        {eligibilityTags.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>Work Eligibility</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {eligibilityTags.map((t, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    fontSize: 10.5,
+                    color: '#3a3a40',
+                    background: '#f4f5f8',
+                    borderRadius: 7,
+                    padding: '4px 9px',
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Work Authorization & Legal (New express fields) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700 }}>Work Eligibility &amp; Preferences</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {eligibilityTags.map((t, idx) => (
-              <span
-                key={idx}
-                style={{
-                  fontSize: 10.5,
-                  color: '#3a3a40',
-                  background: '#f4f5f8',
-                  borderRadius: 7,
-                  padding: '4px 9px',
-                }}
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );

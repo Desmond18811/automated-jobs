@@ -6,6 +6,7 @@
   },
   "scripts": {
     "setup": "npm install && npm --prefix server install && npm --prefix web install && npm --prefix server run browsers",
+    "seed": "npm --prefix server run seed",
     "dev": "concurrently -k -n server,web -c blue,green \"npm --prefix server run dev\" \"npm --prefix web run dev\""
   }
 }
