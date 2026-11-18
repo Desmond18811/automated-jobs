@@ -23,6 +23,9 @@ const schema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   STORAGE_DIR: z.string().default('./storage'),
 
+  CLERK_SECRET_KEY: z.string().default(() => process.env.CLERK_SECRET_KEY || ''),
+  CLERK_PUBLISHABLE_KEY: z.string().default(() => process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || ''),
+
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().default(900),
   REFRESH_TOKEN_DAYS: z.coerce.number().default(30),
@@ -34,8 +37,20 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().default(''),
   GOOGLE_REDIRECT_URI: z.string().default('http://localhost:4000/api/gmail/callback'),
 
+  OPENROUTER_API_KEY: z.string().default(''),
   ANTHROPIC_API_KEY: z.string().default(''),
-  LLM_MODEL: z.string().default('claude-sonnet-5-5'),
+  LLM_MODEL: z.string().default('anthropic/claude-opus-5'),
+
+  // WhatsApp Alerts & Contact Updates
+  WHATSAPP_PROVIDER: z.enum(['textmebot', 'callmebot', 'twilio', 'cloudapi', 'simulated']).default('textmebot'),
+  WHATSAPP_TO: z.string().default('2349025958370'),
+  TEXTMEBOT_APIKEY: z.string().default('2qXNzBC699fH'),
+  CALLMEBOT_APIKEY: z.string().default(''),
+  TWILIO_ACCOUNT_SID: z.string().default(''),
+  TWILIO_AUTH_TOKEN: z.string().default(''),
+  TWILIO_WHATSAPP_FROM: z.string().default(''),
+  WHATSAPP_ACCESS_TOKEN: z.string().default(''),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
 
   RSS_FEEDS: csv,
   REMOTEOK_ENABLED: bool,

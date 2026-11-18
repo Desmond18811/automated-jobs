@@ -1,8 +1,9 @@
 import { useState, useEffect, type FC } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { SignedIn, UserButton } from '@clerk/clerk-react';
 import { JaviGlyph } from '@/assets/logos';
-import { BellIcon } from '@/assets/icons';
-import { AVATAR_ADA } from '@/assets/avatars';
+import { BellIcon, UsFlagIcon } from '@/assets/icons';
+import { AVATAR_ANGELICA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
 import { notificationsApi } from '@/api';
 import { useSocket } from '@/hooks/useSocket';
@@ -105,7 +106,10 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
       </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 500, color: '#3a3a40', cursor: 'pointer' }}>Eng (US) ▾</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Language selection">
+          <UsFlagIcon size={18} />
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: '#3a3a40' }}>Eng (US) ▾</span>
+        </div>
 
         {/* Bell Icon & Notification Popup */}
         <div style={{ position: 'relative' }}>
@@ -131,25 +135,17 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
               <span
                 style={{
                   position: 'absolute',
-                  top: 3,
-                  right: 3,
-                  minWidth: 14,
-                  height: 14,
-                  padding: '0 3px',
-                  borderRadius: 999,
+                  top: 5,
+                  right: 5,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
                   background: '#ef4444',
-                  color: '#fff',
                   border: '1.5px solid #fff',
-                  fontSize: 8.5,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  display: 'block',
                   boxSizing: 'border-box',
                 }}
-              >
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
+              />
             )}
           </div>
 
@@ -161,17 +157,23 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
           />
         </div>
 
+        <SignedIn>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <UserButton />
+          </div>
+        </SignedIn>
+
         <div
-          onClick={() => (onOpenSettings ? onOpenSettings() : nav('/setup'))}
+          onClick={() => (onSelectTab ? onSelectTab('cv_profile') : onOpenSettings ? onOpenSettings() : nav('/setup'))}
           style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
           title="Account profile"
         >
           <img
-            src={profile.avatarUrl || AVATAR_ADA}
-            alt={profile.fullName}
+            src={profile.avatarUrl || AVATAR_ANGELICA}
+            alt={profile.fullName || 'Angelica'}
             style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }}
           />
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Candidate'} ▾</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Angelica'} ▾</span>
         </div>
       </div>
     </div>

@@ -46,6 +46,14 @@ export const SignUp: FC = () => {
     }
   };
 
+  const handleGoogleAuth = () => {
+    if ((window as any).Clerk?.openSignUp) {
+      (window as any).Clerk.openSignUp({ redirectUrl: '/setup' });
+    } else {
+      handleSubmit();
+    }
+  };
+
   return (
     <div
       data-screen-label="Sign up"
@@ -89,17 +97,17 @@ export const SignUp: FC = () => {
         >
           <div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-.6px' }}>
-              Create your Javi account
+              Get started with JAVI
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6a6a72' }}>
-              Welcome to the private beta! Next up: extensive profile setup.
+              Create an account in a few minutes
             </p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button
               type="button"
-              onClick={() => handleSubmit()}
+              onClick={handleGoogleAuth}
               style={{
                 height: 38,
                 border: '1px solid #e6e6ea',
@@ -117,11 +125,11 @@ export const SignUp: FC = () => {
               }}
             >
               <GoogleLogo size={18} />
-              Sign up with Google
+              Google
             </button>
             <button
               type="button"
-              onClick={() => handleSubmit()}
+              onClick={handleGoogleAuth}
               style={{
                 height: 38,
                 border: '1px solid #e6e6ea',
@@ -139,7 +147,7 @@ export const SignUp: FC = () => {
               }}
             >
               <LinkedInLogo size={18} />
-              Sign up with LinkedIn
+              LinkedIn
             </button>
           </div>
 
@@ -202,7 +210,7 @@ export const SignUp: FC = () => {
                   required
                   value={lastName}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
-                  placeholder="Okafor"
+                  //    placeholder="Okafor"
                   style={{
                     height: 36,
                     border: '1px solid #e6e6ea',

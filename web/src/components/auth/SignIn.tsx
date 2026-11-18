@@ -30,6 +30,14 @@ export const SignIn: FC = () => {
     }
   };
 
+  const handleGoogleAuth = () => {
+    if ((window as any).Clerk?.openSignIn) {
+      (window as any).Clerk.openSignIn({ redirectUrl: '/dash' });
+    } else {
+      handleSubmit();
+    }
+  };
+
   return (
     <div
       data-screen-label="Sign in"
@@ -80,7 +88,7 @@ export const SignIn: FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button
               type="button"
-              onClick={() => nav('/dash')}
+              onClick={handleGoogleAuth}
               style={{
                 height: 40,
                 border: '1px solid #e6e6ea',
@@ -102,7 +110,7 @@ export const SignIn: FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => nav('/dash')}
+              onClick={handleGoogleAuth}
               style={{
                 height: 40,
                 border: '1px solid #e6e6ea',
@@ -162,7 +170,6 @@ export const SignIn: FC = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@email.com"
                 required
                 style={{
                   height: 38,
@@ -188,7 +195,6 @@ export const SignIn: FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
                   required
                   style={{
                     width: '100%',
@@ -265,10 +271,8 @@ export const SignIn: FC = () => {
             <Link to="/signup" style={{ color: '#2f6ef0', fontWeight: 600 }}>
               Sign up
             </Link>
-            <span>·</span>
-            <Link to="/waitlist" style={{ color: '#6a6a72' }}>
-              Waitlist
-            </Link>
+
+
           </div>
         </div>
       </div>

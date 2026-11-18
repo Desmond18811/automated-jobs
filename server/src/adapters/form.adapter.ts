@@ -12,17 +12,17 @@ import type { AdapterResult, ApplyContext, ChannelAdapter } from './types';
  * Anything unknown becomes a "needs you" task; the saved answer is reused next time.
  */
 
-interface FieldInfo {
+export interface FieldInfo {
   idx: number; tag: string; type: string; label: string; groupLabel: string;
   required: boolean; options: string[]; name: string;
 }
-interface Fill { idx: number; kind: 'text' | 'select' | 'file' | 'check'; value: string }
+export interface Fill { idx: number; kind: 'text' | 'select' | 'file' | 'check'; value: string }
 
 const CAPTCHA = 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], .g-recaptcha, .h-captcha, .cf-turnstile';
 const SALARY_RE = /salary|compensation|remuneration|pay expectation|expected pay|desired pay|\bctc\b|rate expectation/i;
 const SUCCESS_RE = /thank you|thanks for applying|application (has been )?(received|submitted)|we('ve| have) received your application/i;
 
-async function collectFields(page: Page): Promise<FieldInfo[]> {
+export async function collectFields(page: Page): Promise<FieldInfo[]> {
   return page.$$eval('input, textarea, select', (els) => {
     const out: FieldInfo[] = [];
     els.forEach((el, idx) => {
@@ -52,7 +52,7 @@ async function collectFields(page: Page): Promise<FieldInfo[]> {
   });
 }
 
-function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
+export function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
   const p = ctx.profile;
   const text = `${f.label} ${f.name}`.toLowerCase();
   const [first = '', ...rest] = (p.fullName ?? '').split(/\s+/);
@@ -70,20 +70,24 @@ function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
   if (/e-?mail/i.test(text)) return p.email || undefined;
   if (/phone|mobile|telephone/i.test(text)) return p.phone || undefined;
 
-  // 3. Socials & Portfolios
-  if (/linkedin/i.test(text)) return p.linkedinUrl || link(/linkedin/i) || undefined;
-  if (/github/i.test(text)) return p.githubUrl || link(/github/i) || undefined;
-  if (/portfolio|personal (site|website)|website/i.test(text)) return p.portfolioUrl || link(/portfolio|website|site/i) || p.links?.[0]?.url || undefined;
+  // 3. Socials & Portfolios (including LinkedIn)
+  if (/linkedin|linked in|social profile|public profile/i.test(text)) return p.linkedinUrl || link(/linkedin/i) || undefined;
+  if (/github|git repository|code sample/i.test(text)) return p.githubUrl || link(/github/i) || undefined;
+  if (/portfolio|personal (site|website)|website|work sample/i.test(text)) return p.portfolioUrl || link(/portfolio|website|site/i) || p.links?.[0]?.url || undefined;
   if (/twitter|x\.com/i.test(text)) return p.twitterUrl || link(/twitter|x\.com/i) || undefined;
 
-  // 4. Address & Location
+  // 4. Headline & Summary
+  if (/headline|professional summary|bio|about (you|me)/i.test(text)) return p.headline || p.summary || undefined;
+  if (/skills|technologies|proficiencies/i.test(text)) return p.primarySkills?.join(', ') || undefined;
+
+  // 5. Address & Location
   if (/street (address)?|address line 1/i.test(text)) return p.address?.street || undefined;
   if (/(zip|postal) code/i.test(text)) return p.address?.postalCode || undefined;
   if (/^state\b|province|region/i.test(text)) return p.address?.state || undefined;
   if (/^country\b/i.test(text)) return p.address?.country || undefined;
   if (/^(location|city)\b|current location|where are you based|current city/i.test(text)) return p.address?.city || p.location || undefined;
 
-  // 5. Work authorization & Legal eligibility
+  // 6. Work authorization & Legal eligibility
   if (/authorized to work|legal.*authoriz|right to work/i.test(text)) {
     if (p.workAuthorization === 'authorized') return 'Yes';
     if (p.workAuthorization === 'not_authorized') return 'No';
@@ -98,18 +102,18 @@ function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
     return 'None';
   }
 
-  // 6. Availability & Notice
+  // 7. Availability & Notice
   if (/start date|earliest.*start|when can you start/i.test(text)) return p.earliestStartDate || undefined;
   if (/notice period|notice/i.test(text)) return p.noticePeriod || undefined;
 
-  // 7. Experience, current company & title
+  // 8. Experience, current company & title
   if (/years of (work )?experience|total experience/i.test(text)) {
     return p.yearsOfExperience !== undefined ? String(p.yearsOfExperience) : undefined;
   }
   if (/current (job )?title|current role|present role/i.test(text)) return p.currentTitle || undefined;
   if (/current (employer|company)|present company/i.test(text)) return p.currentCompany || undefined;
 
-  // 8. Education
+  // 9. Education
   if (/highest (level of )?education|education level|degree/i.test(text)) {
     return p.highestEducationLevel || p.education?.[0]?.degree || undefined;
   }
@@ -117,12 +121,12 @@ function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
     return p.education?.[0]?.institution || undefined;
   }
 
-  // 9. Compensation
+  // 10. Compensation
   if (SALARY_RE.test(text)) {
     return p.salaryExpectation?.minimum ? String(p.salaryExpectation.minimum) : p.salaryFloor?.amount ? String(p.salaryFloor.amount) : undefined;
   }
 
-  // 10. EEO voluntary disclosures
+  // 11. EEO voluntary disclosures
   if (/gender|sex\b/i.test(text)) return p.eeo?.gender || undefined;
   if (/veteran/i.test(text)) return p.eeo?.veteranStatus || undefined;
   if (/disability/i.test(text)) return p.eeo?.disabilityStatus || undefined;
@@ -132,7 +136,7 @@ function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
   return undefined;
 }
 
-function planFill(fields: FieldInfo[], ctx: ApplyContext) {
+export function planFill(fields: FieldInfo[], ctx: ApplyContext) {
   const answers = new Map<string, string>();
   for (const a of ctx.profile.answerBank) if (a.reusable) answers.set(a.key, a.answer);
   for (const [k, v] of Object.entries(ctx.extraAnswers)) answers.set(k, v);

@@ -44,10 +44,11 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
   }
 
   // 2. Dual-Verification: Verify Clerk token if CLERK_SECRET_KEY is configured
-  const clerk = await getClerkClient();
-  if (clerk) {
+  const secretKey = process.env.CLERK_SECRET_KEY || env.CLERK_SECRET_KEY;
+  if (secretKey) {
     try {
-      const verified = await clerk.verifyToken(token);
+      const { verifyToken } = await import('@clerk/backend');
+      const verified: any = await verifyToken(token, { secretKey });
       if (verified?.sub) {
         req.userId = verified.sub;
         return next();

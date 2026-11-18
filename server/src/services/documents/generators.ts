@@ -156,7 +156,7 @@ export interface GeneratedDocs {
 
 /** Everything for one application. fileStem must start with the userId. */
 export async function generateDocuments(p: IProfile, j: IJobPost, channel: Channel, fileStem: string): Promise<GeneratedDocs> {
-  if (!llmEnabled()) throw new Error('ANTHROPIC_API_KEY is not set; drafts cannot be generated');
+  if (!llmEnabled()) throw new Error('LLM is not configured (set OPENROUTER_API_KEY or ANTHROPIC_API_KEY); drafts cannot be generated');
   const vocab = buildVocab(p, j);
   const cv = buildTailoredCv(p, j);
 

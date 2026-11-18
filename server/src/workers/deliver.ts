@@ -68,6 +68,12 @@ export async function deliverProcessor(job: Job<{ applicationId: string }>) {
   if (result.status === 'sent') {
     app.delivery = { ...result.ref, sentAt: new Date(), screenshotPath: result.screenshotPath };
     await transition(app, 'sent', result.detail);
+    await notify(userId, {
+      type: 'sent',
+      title: `Application Submitted: ${post.title}`,
+      body: `Successfully submitted your application to ${post.company} via ${app.channel}.`,
+      data: { applicationId: app.id, company: post.company, title: post.title },
+    }).catch(() => null);
     return { sent: true };
   }
 

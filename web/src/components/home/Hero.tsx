@@ -237,7 +237,7 @@ export const Hero: FC = () => (
       </p>
       <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
         <Link
-          to="/waitlist"
+          to="/signin"
           style={{
             fontSize: 11.5,
             fontWeight: 500,

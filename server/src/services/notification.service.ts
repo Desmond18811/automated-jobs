@@ -23,8 +23,8 @@ export async function notify(
   emitToUser(uid, 'notification:new', doc);
   emitToUser(uid, 'notifications:refresh', { countDelta: 1, notification: doc });
 
-  // 2. WhatsApp text notification for actionable / urgent events
-  const URGENT_TYPES: NotificationType[] = ['needs_user', 'interview_invite', 'draft_needs_attention'];
+  // 2. WhatsApp text notification for actionable / urgent events & application deliveries
+  const URGENT_TYPES: NotificationType[] = ['needs_user', 'interview_invite', 'draft_needs_attention', 'sent'];
   if (URGENT_TYPES.includes(n.type)) {
     await sendWhatsAppAlert(uid, {
       type: n.type,

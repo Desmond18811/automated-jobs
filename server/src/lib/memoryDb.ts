@@ -66,13 +66,13 @@ export function activateMemoryDb(): void {
     _id: new Types.ObjectId(),
     userId: defaultUserId,
     status: 'complete',
-    firstName: 'Alex',
-    lastName: 'Okafor',
-    fullName: 'Alex Okafor',
+    firstName: 'Angelica',
+    lastName: 'Greeze',
+    fullName: 'Angelica Greeze',
     email: 'candidate@javi.ai',
-    phone: '+234 801 234 5678',
-    headline: 'Lead Automation & Product Engineer',
-    location: 'Lekki, Lagos',
+    phone: '+1 (555) 234-5678',
+    headline: 'UI / UX Designer',
+    location: 'New York, NY (Open to Remote / Relocation)',
     careerPages: [
       {
         url: 'https://stripe.com/jobs',
@@ -90,36 +90,42 @@ export function activateMemoryDb(): void {
       },
     ],
     rules: { dailySendCap: 15, approvalMode: 'review' },
-    targetRoles: ['Lead Automation Engineer', 'Full-Stack Developer', 'Product Engineer'],
-    primarySkills: ['TypeScript', 'React', 'Node.js', 'Python', 'FastAPI'],
-    secondarySkills: ['Docker', 'AWS', 'PostgreSQL', 'Redis', 'GraphQL'],
-    toolsAndFrameworks: ['Playwright', 'Vite', 'Express', 'TailwindCSS'],
+    targetRoles: ['UI / UX Designer', 'UI Designer', 'Product Designer'],
+    primarySkills: ['UI', 'Ux', 'Website Design', 'Mobile Design', 'Research', 'Interaction'],
+    secondarySkills: ['Figma', 'Prototyping', 'Design Systems', 'User Testing'],
+    toolsAndFrameworks: ['Figma', 'Adobe XD', 'Sketch', 'Principle', 'HTML/CSS'],
     experience: [
       {
-        title: 'Lead Automation Engineer',
-        company: 'Apex Labs',
+        title: 'UI / UX Designer',
+        company: 'Ideologist Team',
         location: 'Remote',
         start: 'Jan 2022',
         end: 'Present',
         current: true,
-        highlights: ['Built end-to-end automated pipelines processing 2M+ records daily.'],
+        highlights: ['Leading UX research, interaction architecture, and scalable design systems.'],
       },
       {
-        title: 'Full-Stack Software Engineer',
-        company: 'Vanguard Systems',
-        location: 'Lagos',
-        start: 'Feb 2020',
-        end: 'Dec 2021',
+        title: 'UI Designer',
+        company: 'Tigabatang',
+        location: 'Fulltime',
+        start: 'Jan 2022',
+        end: 'Present',
         current: false,
-        highlights: ['Engineered scalable microservices and internal analytics tooling.'],
+        highlights: ['Designed high-fidelity interactive prototypes and design documentation.'],
       },
     ],
     education: [
       {
-        institution: 'University of Lagos',
-        degree: 'B.Sc. Computer Engineering',
+        institution: 'Oxford University',
+        degree: 'Student - Software Engienering',
+        start: '2018',
+        end: '2021',
+      },
+      {
+        institution: 'Oxford Vocational High School',
+        degree: 'Student - Software Engienering',
         start: '2015',
-        end: '2019',
+        end: '2015',
       },
     ],
     projects: [
@@ -131,7 +137,7 @@ export function activateMemoryDb(): void {
     ],
     set(keyOrObj: any, val?: any) {
       if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
-      else this[keyOrObj] = val;
+      else (this as any)[keyOrObj] = val;
     },
     toObject() {
       return { ...this };

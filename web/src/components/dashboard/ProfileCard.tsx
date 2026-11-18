@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AVATAR_ADA } from '@/assets/avatars';
+import { AVATAR_ANGELICA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
 
 export const ProfileCard: FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
@@ -102,7 +102,7 @@ export const ProfileCard: FC<{ onOpenSettings?: () => void }> = ({ onOpenSetting
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <img
-            src={profile.avatarUrl || AVATAR_ADA}
+            src={profile.avatarUrl || AVATAR_ANGELICA}
             alt={displayName}
             style={{
               width: 64,

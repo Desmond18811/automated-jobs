@@ -154,8 +154,18 @@ export async function api<T = any>(endpoint: string, options: RequestOptions = {
     reqBody = JSON.stringify(json);
   }
 
-  // Attach Bearer token if available
-  const token = tokenStorage.get();
+  // Attach Bearer token if available (supports local JWT & Clerk sessions)
+  let token = tokenStorage.get();
+  if (!token && typeof window !== 'undefined' && (window as any).Clerk?.session) {
+    try {
+      token = await (window as any).Clerk.session.getToken();
+      if (token) {
+        tokenStorage.set(token);
+      }
+    } catch {
+      // Ignore
+    }
+  }
   if (token && !skipAuth && !reqHeaders['Authorization']) {
     reqHeaders['Authorization'] = `Bearer ${token}`;
   }
@@ -627,6 +637,28 @@ export const analyticsApi = {
   },
 };
 
+// -----------------------------------------------------------------------------
+// 10. Diagnostic & Automated Tests API (Form Auto-Fill & WhatsApp Alerts)
+// -----------------------------------------------------------------------------
+export const testApi = {
+  /** Tests candidate form mapping (LinkedIn, ATS fields, contacts, PDF resume) */
+  testFormFill: async (): Promise<any> => {
+    return api('/test/form-fill', { method: 'POST' });
+  },
+  /** Sends live WhatsApp alert to contact number with multi-provider fallback */
+  testWhatsApp: async (payload: { phone?: string; message?: string; type?: string } = {}): Promise<any> => {
+    return api('/test/whatsapp', { method: 'POST', json: payload });
+  },
+  /** Runs end-to-end simulated form submission and sends confirmation WhatsApp alert */
+  testE2EApply: async (): Promise<any> => {
+    return api('/test/e2e-apply', { method: 'POST' });
+  },
+  /** Executes complete LLM CV tailoring (e.g. Stripe Payments), custom questions, form autofill, and WhatsApp dispatch */
+  testStripeTailoredApply: async (): Promise<any> => {
+    return api('/test/stripe-tailored-apply', { method: 'POST' });
+  },
+};
+
 // Export unified client object as default and named export
 export const javiApi = {
   auth: authApi,
@@ -639,6 +671,7 @@ export const javiApi = {
   analytics: analyticsApi,
   me: meApi,
   gmail: gmailApi,
+  test: testApi,
 };
 
 export default api;

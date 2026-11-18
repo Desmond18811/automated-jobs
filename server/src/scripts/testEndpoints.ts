@@ -38,11 +38,11 @@ function callExpress(
   body: any = null,
 ): Promise<{ status: number; headers: Record<string, any>; body: string }> {
   return new Promise((resolve) => {
-    const socket = new PassThrough();
-    socket.destroy = function () {};
-    (socket as any).remoteAddress = '127.0.0.1';
+    const socket: any = new PassThrough();
+    socket.destroy = function () { return socket; };
+    socket.remoteAddress = '127.0.0.1';
 
-    const req = new http.IncomingMessage(socket);
+    const req = new http.IncomingMessage(socket as any);
     req.method = method;
     req.url = url;
     req.headers = Object.fromEntries(
@@ -55,7 +55,7 @@ function callExpress(
     }
 
     const res = new http.ServerResponse(req);
-    res.assignSocket(socket);
+    res.assignSocket(socket as any);
 
     let resBody = '';
 
@@ -634,10 +634,24 @@ async function main() {
   await test('Export User Data', 'GET', '/api/me/export', 200);
 
   // ---------------------------------------------------------------------------
+  // 11. Form Auto-Fill & WhatsApp Alert Integration Tests
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 11. Form Auto-Fill & WhatsApp Alert Integration ---');
+  await test('Test Candidate Form Auto-Fill (LinkedIn & ATS)', 'POST', '/api/test/form-fill', 200);
+  await test('Test WhatsApp Alert Dispatch', 'POST', '/api/test/whatsapp', 200, {
+    phone: '2349025958370',
+    message: 'Automated test alert from endpoint suite',
+    type: 'sent',
+  });
+  await test('Test End-to-End Apply & WhatsApp Pipeline', 'POST', '/api/test/e2e-apply', 200);
+  await test('Test Stripe LLM Tailored Apply Pipeline', 'POST', '/api/test/stripe-tailored-apply', 200);
+
+  // ---------------------------------------------------------------------------
   // Cleanup
   // ---------------------------------------------------------------------------
   if (ephemeralServer) {
-    await new Promise<void>((resolve) => ephemeralServer!.close(() => resolve()));
+    const s: http.Server = ephemeralServer;
+    await new Promise<void>((resolve) => s.close(() => resolve()));
   }
   if (didConnectDb) {
     await disconnectDb();

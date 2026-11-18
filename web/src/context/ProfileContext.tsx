@@ -19,12 +19,15 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return { ...EMPTY_PROFILE, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored);
+        if (parsed.fullName || parsed.firstName || parsed.email) {
+          return { ...DEFAULT_PROFILE, ...parsed };
+        }
       }
     } catch (err) {
       console.warn('Could not load profile from localStorage', err);
     }
-    return EMPTY_PROFILE;
+    return DEFAULT_PROFILE;
   });
 
   const refreshProfile = async () => {

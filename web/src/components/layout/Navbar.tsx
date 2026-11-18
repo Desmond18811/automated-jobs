@@ -105,7 +105,7 @@ export const Navbar: FC = () => (
         Sign in
       </Link>
       <Link
-        to="/waitlist"
+        to="/signin"
         style={{
           fontSize: 11.5,
           fontWeight: 500,
@@ -115,7 +115,7 @@ export const Navbar: FC = () => (
           padding: '8px 12px',
         }}
       >
-        Join waitlist
+        Get Started
       </Link>
     </div>
   </nav>

@@ -13,6 +13,9 @@
     "start:worker": "node dist/worker.js",
     "test": "tsx src/scripts/testEndpoints.ts",
     "test:endpoints": "tsx src/scripts/testEndpoints.ts",
+    "test:openrouter": "tsx src/scripts/testOpenRouter.ts",
+    "test:form-whatsapp": "tsx src/scripts/testFormAndWhatsApp.ts",
+    "test:tailored-stripe": "tsx src/scripts/testStripeTailoredApply.ts",
     "typecheck": "tsc --noEmit",
     "setup:browser": "playwright install chromium"
   },

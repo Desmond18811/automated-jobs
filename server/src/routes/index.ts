@@ -10,6 +10,7 @@ import meRoutes from './me.routes';
 import notificationRoutes from './notification.routes';
 import profileRoutes from './profile.routes';
 import taskRoutes from './task.routes';
+import testRoutes from './test.routes';
 
 const apiRouter = Router();
 
@@ -27,6 +28,7 @@ apiRouter.use('/notifications', requireAuth, notificationRoutes);
 apiRouter.use('/business', requireAuth, businessRoutes);
 apiRouter.use('/analytics', requireAuth, analyticsRoutes);
 apiRouter.use('/me', requireAuth, meRoutes);
+apiRouter.use('/test', requireAuth, testRoutes);
 
 export default apiRouter;
 export {
@@ -40,4 +42,5 @@ export {
   notificationRoutes,
   profileRoutes,
   taskRoutes,
+  testRoutes,
 };

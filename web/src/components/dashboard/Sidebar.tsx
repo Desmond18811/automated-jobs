@@ -11,7 +11,7 @@ import {
   UserIcon,
   ZapIcon,
 } from '@/assets/icons';
-import { AVATAR_ADA } from '@/assets/avatars';
+import { AVATAR_ANGELICA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
 import { authApi } from '@/api';
 
@@ -65,6 +65,9 @@ export const Sidebar: FC<SidebarProps> = ({
 
   const handleLogout = async () => {
     try {
+      if ((window as any).Clerk?.signOut) {
+        await (window as any).Clerk.signOut();
+      }
       await authApi.logout();
     } finally {
       window.location.href = '/signin';
@@ -201,7 +204,7 @@ export const Sidebar: FC<SidebarProps> = ({
           >
             <div style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f3', display: 'flex', alignItems: 'center', gap: 8 }}>
               <img
-                src={profile.avatarUrl || AVATAR_ADA}
+                src={profile.avatarUrl || AVATAR_ANGELICA}
                 alt={displayName}
                 style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid #e4e4e7', flexShrink: 0 }}
               />
@@ -341,7 +344,7 @@ export const Sidebar: FC<SidebarProps> = ({
               }}
             >
               <img
-                src={profile.avatarUrl || AVATAR_ADA}
+                src={profile.avatarUrl || AVATAR_ANGELICA}
                 alt={displayName}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

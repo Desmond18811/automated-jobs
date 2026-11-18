@@ -462,3 +462,83 @@ export const XIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style 
   </svg>
 );
 
+export const LightbulbIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+    <path d="M9 18h6" />
+    <path d="M10 22h4" />
+  </svg>
+);
+
+export const PencilIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+  </svg>
+);
+
+export const UsFlagIcon: FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 18, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    style={{ borderRadius: '50%', flexShrink: 0, display: 'inline-block', verticalAlign: 'middle', ...style }}
+  >
+    <defs>
+      <clipPath id="us-flag-round">
+        <circle cx="12" cy="12" r="12" />
+      </clipPath>
+    </defs>
+    <g clipPath="url(#us-flag-round)">
+      <rect x="0" y="0" width="24" height="24" fill="#ffffff" />
+      <rect x="0" y="0" width="24" height="3.7" fill="#dc2626" />
+      <rect x="0" y="7.4" width="24" height="3.7" fill="#dc2626" />
+      <rect x="0" y="14.8" width="24" height="3.7" fill="#dc2626" />
+      <rect x="0" y="22.2" width="24" height="2" fill="#dc2626" />
+      <rect x="0" y="0" width="11" height="13" fill="#1e3a8a" />
+      <circle cx="3" cy="3.5" r="0.9" fill="#ffffff" />
+      <circle cx="8" cy="3.5" r="0.9" fill="#ffffff" />
+      <circle cx="5.5" cy="6.8" r="0.9" fill="#ffffff" />
+      <circle cx="3" cy="10" r="0.9" fill="#ffffff" />
+      <circle cx="8" cy="10" r="0.9" fill="#ffffff" />
+    </g>
+  </svg>
+);
+
+export const MessageCircleIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+  </svg>
+);
+
+
+
