@@ -1,5 +1,4 @@
 import { Types } from 'mongoose';
-import bcrypt from 'bcryptjs';
 import { User } from '../models/user.model';
 import { Profile } from '../models/profile.model';
 import { JobPost } from '../models/jobPost.model';
@@ -7,6 +6,7 @@ import { Application } from '../models/application.model';
 import { Task } from '../models/task.model';
 import { Notification } from '../models/notification.model';
 import { BusinessLead } from '../models/businessLead.model';
+import { LoginChallenge } from '../models/loginChallenge.model';
 import { RefreshToken } from '../models/refreshToken.model';
 import { AuditLog } from '../models/audit.model';
 import { TaxonomyRequest } from '../models/taxonomyRequest.model';
@@ -35,8 +35,6 @@ export function activateMemoryDb(): void {
   const memoryTokens: any[] = [];
 
   // Pre-seed comprehensive demo users
-  const passwordHash = bcrypt.hashSync('Password123!', 10);
-  const passwordHashSimple = bcrypt.hashSync('password123', 10);
 
   const demoSeeds = [
     {
@@ -102,7 +100,6 @@ export function activateMemoryDb(): void {
       _id: s.id,
       id: String(s.id),
       email: s.email,
-      passwordHash: passwordHashSimple,
       role: 'candidate',
       status: 'active',
       isEmailVerified: true,
@@ -430,17 +427,36 @@ export function activateMemoryDb(): void {
     return Promise.resolve(userDoc);
   };
 
-  // 2. RefreshToken
-  (RefreshToken as any).create = (doc: any) => {
-    const t = { _id: new Types.ObjectId(), ...doc };
-    memoryTokens.push(t);
-    return Promise.resolve(t);
+  // 2. RefreshToken + LoginChallenge: small equality-filter collections with save().
+  const matches = (doc: any, query: any) =>
+    Object.entries(query || {}).every(([k, v]) => String(doc[k]) === String(v));
+  const memoryCollection = (Model: any, rows: any[], stamp: boolean) => {
+    Model.create = (doc: any) => {
+      const row: any = {
+        _id: new Types.ObjectId(),
+        ...(stamp ? { createdAt: new Date() } : {}),
+        ...doc,
+        save() {
+          return Promise.resolve(this);
+        },
+      };
+      rows.push(row);
+      return Promise.resolve(row);
+    };
+    Model.find = (query: any) => Promise.resolve(rows.filter((r) => matches(r, query)));
+    Model.findOne = (query: any) => Promise.resolve(rows.find((r) => matches(r, query)) || null);
+    Model.updateMany = (query: any, update: any) => {
+      const hit = rows.filter((r) => matches(r, query));
+      hit.forEach((r) => Object.assign(r, update));
+      return Promise.resolve({ modifiedCount: hit.length });
+    };
+    Model.deleteMany = (query: any) => {
+      for (let i = rows.length - 1; i >= 0; i--) if (matches(rows[i], query)) rows.splice(i, 1);
+      return Promise.resolve({ deletedCount: 0 });
+    };
   };
-  (RefreshToken as any).findOne = (query: any) => {
-    const found = memoryTokens.find((t) => t.tokenHash === query.tokenHash);
-    return Promise.resolve(found || null);
-  };
-  (RefreshToken as any).updateMany = () => Promise.resolve({ modifiedCount: 1 });
+  memoryCollection(RefreshToken as any, memoryTokens, false);
+  memoryCollection(LoginChallenge as any, [], true);
 
   // 3. Profile
   (Profile as any).findOne = (query: any) => {
