@@ -1,9 +1,9 @@
-process.env.NODE_ENV = 'test';
+import './endpointTestEnv'; // must stay first
 import http from 'node:http';
 import dns from 'node:dns/promises';
 import { PassThrough } from 'node:stream';
 import { Types } from 'mongoose';
-import bcrypt from 'bcryptjs';
+import { createTestSession } from './authTestHelper';
 import { createApp } from '../app';
 import { connectDb, disconnectDb } from '../lib/db';
 import { env } from '../config/env';
@@ -17,6 +17,9 @@ import { BusinessLead } from '../models/businessLead.model';
 import { RefreshToken } from '../models/refreshToken.model';
 import { queues } from '../queues';
 import { AuditLog } from '../models/audit.model';
+import { BusinessServices } from '../models/businessServices.model';
+import { SiteAccount } from '../models/siteAccount.model';
+import { TaxonomyRequest } from '../models/taxonomyRequest.model';
 
 interface TestResult {
   endpoint: string;
@@ -337,32 +340,47 @@ function setupInMemoryFallback() {
   // Mock AuditLog
   (AuditLog as any).find = () => createQueryChain([]);
 
-  // Mock BusinessLead
-  (BusinessLead as any).find = () => createQueryChain(memoryBusinessLeads);
-  (BusinessLead as any).findOne = (query: any) => {
-    const found = memoryBusinessLeads.find((b) => !query._id || String(b._id) === String(query._id));
-    if (found) {
-      found.save = () => Promise.resolve(found);
-    }
-    return Promise.resolve(found || null);
+  // Business Mode, site accounts and taxonomy requests: a small document store (create/find/save).
+  const docStore = (Model: any, store: any[], defaults: Record<string, unknown> = {}) => {
+    const match = (d: any, q: any = {}) => Object.entries(q).every(([k, v]) => String(d[k]) === String(v));
+    const asDoc = (raw: any) => {
+      const d: any = { _id: new Types.ObjectId(), createdAt: new Date(), updatedAt: new Date(), ...defaults, ...raw };
+      Object.defineProperty(d, 'id', { get: () => String(d._id), enumerable: false });
+      d.save = () => Promise.resolve(d);
+      d.set = (k: any, v?: any) => (typeof k === 'object' ? Object.assign(d, k) : (d[k] = v));
+      d.markModified = () => undefined;
+      d.toObject = () => ({ ...d });
+      return d;
+    };
+    const one = (v: any) => ({ lean: () => Promise.resolve(v), then: (r: any, j: any) => Promise.resolve(v).then(r, j), catch: (j: any) => Promise.resolve(v).catch(j) });
+    Model.create = (doc: any) => {
+      const d = asDoc(doc);
+      store.push(d);
+      return Promise.resolve(d);
+    };
+    Model.find = (q?: any) => createQueryChain(store.filter((d) => match(d, q)));
+    Model.findOne = (q?: any) => one(store.find((d) => match(d, q)) ?? null);
+    Model.findById = (id: any) => one(store.find((d) => String(d._id) === String(id)) ?? null);
+    Model.updateOne = (q: any, update: any, opts: any = {}) => {
+      let d = store.find((x) => match(x, q));
+      if (!d && opts.upsert) store.push((d = asDoc(q)));
+      if (d) Object.assign(d, update.$set ?? update);
+      return Promise.resolve({ acknowledged: true });
+    };
+    Model.deleteOne = (q: any) => {
+      const i = store.findIndex((d) => match(d, q));
+      if (i >= 0) store.splice(i, 1);
+      return Promise.resolve({ deletedCount: i >= 0 ? 1 : 0 });
+    };
+    Model.deleteMany = (q: any) => {
+      for (let i = store.length - 1; i >= 0; i--) if (match(store[i], q)) store.splice(i, 1);
+      return Promise.resolve({ acknowledged: true });
+    };
   };
-  (BusinessLead as any).findOneAndUpdate = (query: any, update: any, opts: any) => {
-    let found = memoryBusinessLeads.find((b) => String(b._id) === String(query._id) || b.name === query.name);
-    if (!found && opts?.upsert) {
-      found = {
-        _id: new Types.ObjectId(),
-        ...update,
-        save() {
-          return Promise.resolve(this);
-        },
-      };
-      memoryBusinessLeads.push(found);
-    } else if (found) {
-      Object.assign(found, update);
-      found.save = () => Promise.resolve(found);
-    }
-    return Promise.resolve(found);
-  };
+  docStore(BusinessLead, memoryBusinessLeads, { status: 'new', contacts: [], pitches: [], notes: [], history: [], valueInputs: {} });
+  docStore(BusinessServices, [], { hourlyRate: 7500, fxRate: 1550, marginPct: 30, guarantees: { ownership: true, liveByDays: 21 }, caseStudies: [] });
+  docStore(SiteAccount, []);
+  docStore(TaxonomyRequest, []);
 }
 
 async function main() {
@@ -507,29 +525,12 @@ async function main() {
   // ---------------------------------------------------------------------------
   console.log('\n--- 2. Authentication Flow ---');
   const uniqueId = Date.now().toString(36);
-  const testUser = {
-    email: `tester_${uniqueId}@example.com`,
-    password: 'Password123!',
-    name: 'Test Runner',
-  };
-
-  await test('Register User', 'POST', '/api/auth/register', [200, 201], testUser, (data) => {
-    if (data?.accessToken) authToken = data.accessToken;
-    else if (data?.token) authToken = data.token;
-  });
-
-  await test('Login User', 'POST', '/api/auth/login', 200, {
-    email: testUser.email,
-    password: testUser.password,
-  }, (data) => {
-    if (data?.accessToken) authToken = data.accessToken;
-    else if (data?.token) authToken = data.token;
-  });
-
-  await test('Google OAuth Login', 'POST', '/api/auth/google', 200, {
-    email: `google_${uniqueId}@gmail.com`,
-    name: 'Google Candidate',
-  });
+  // Sign-in is passwordless and needs an inbox; the full flow is covered by testPasswordlessAuth.ts.
+  // Here we only need an authenticated user, so mint a session directly.
+  authToken = (await createTestSession(`tester_${uniqueId}@example.com`, 'Test Runner')).accessToken;
+  await test('Retired /auth/register is gone', 'POST', '/api/auth/register', 404, { email: 'x@example.com' });
+  await test('Retired /auth/login is gone', 'POST', '/api/auth/login', 404, { email: 'x@example.com' });
+  await test('Retired /auth/google is gone', 'POST', '/api/auth/google', 404, { email: 'x@example.com' });
 
   await test('Get Current User (Me)', 'GET', '/api/auth/me', 200);
 
