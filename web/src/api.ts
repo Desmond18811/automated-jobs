@@ -21,7 +21,14 @@ const TOKEN_KEY = 'javi_access_token';
 /** Number of steps in the profile setup wizard (pages/profile-setup). */
 export const SETUP_STEP_COUNT = 9;
 
+const tokenListeners = new Set<(token: string | null) => void>();
+
 export const tokenStorage = {
+  /** Subscribe to token changes (sign-in, silent refresh, sign-out). Returns an unsubscribe function. */
+  subscribe: (fn: (token: string | null) => void): (() => void) => {
+    tokenListeners.add(fn);
+    return () => tokenListeners.delete(fn);
+  },
   get: (): string | null => {
     try {
       return localStorage.getItem(TOKEN_KEY);
@@ -35,6 +42,7 @@ export const tokenStorage = {
     } catch (e) {
       console.warn('Failed to store access token', e);
     }
+    tokenListeners.forEach((fn) => fn(token));
   },
   clear: (): void => {
     try {
@@ -42,6 +50,7 @@ export const tokenStorage = {
     } catch (e) {
       console.warn('Failed to clear access token', e);
     }
+    tokenListeners.forEach((fn) => fn(null));
   },
   hasToken: (): boolean => !!tokenStorage.get(),
 };
@@ -113,15 +122,10 @@ export const authStateStorage = {
 /**
  * Route candidate to their exact position in the funnel
  */
-export function getRouteForStage(stage?: string, email?: string, name?: string): string {
-  if (stage === 'otp_pending') {
-    const q = email ? `?email=${encodeURIComponent(email)}${name ? `&name=${encodeURIComponent(name)}` : ''}` : '';
-    return `/verify-otp${q}`;
-  }
-  if (stage === 'profile_setup') {
-    return '/setup';
-  }
-  return '/dash';
+export function getRouteForStage(stage?: string): string {
+  if (stage === 'completed') return '/dash';
+  // otp_pending can only be left by signing in, so a signed-in user in that stage is sent to finish profile setup.
+  return '/setup';
 }
 
 function getApiBase(): string {
@@ -146,16 +150,38 @@ export interface RequestOptions {
   skipRefresh?: boolean;
 }
 
-// Queue for handling simultaneous refresh requests
-let isRefreshing = false;
-let refreshPromise: Promise<string | null> | null = null;
+export interface SessionUser {
+  id: string;
+  email: string;
+  name?: string;
+  onboardingStage?: string;
+  isEmailVerified?: boolean;
+  profileImage?: string;
+}
 
-async function refreshAccessToken(): Promise<string | null> {
-  if (isRefreshing && refreshPromise) {
-    return refreshPromise;
-  }
+export interface AuthResponse {
+  accessToken: string;
+  expiresIn?: number;
+  stage?: string;
+  user?: SessionUser;
+}
 
-  isRefreshing = true;
+/** Called when the session can no longer be renewed (idle too long, signed out elsewhere, revoked). */
+let sessionExpiredHandler: (() => void) | null = null;
+export function onSessionExpired(fn: (() => void) | null): void {
+  sessionExpiredHandler = fn;
+}
+
+/**
+ * Exchange the httpOnly refresh cookie for a new access token. Single-flight: every caller that asks while a
+ * refresh is running shares it, so several tabs/requests never race and trip reuse detection.
+ * Only a definite "no" from the server (401) clears the local session; a network error keeps it so a flaky
+ * connection doesn't sign anyone out.
+ */
+let refreshPromise: Promise<AuthResponse | null> | null = null;
+
+export function refreshSession(): Promise<AuthResponse | null> {
+  if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
@@ -163,28 +189,27 @@ async function refreshAccessToken(): Promise<string | null> {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
-
-      if (!res.ok) {
+      if (res.status === 401) {
         tokenStorage.clear();
         return null;
       }
-
-      const data = await res.json();
-      if (data?.accessToken) {
-        tokenStorage.set(data.accessToken);
-        return data.accessToken;
-      }
-      return null;
-    } catch (err) {
-      tokenStorage.clear();
+      if (!res.ok) return null;
+      const data = (await res.json()) as AuthResponse;
+      if (!data?.accessToken) return null;
+      tokenStorage.set(data.accessToken);
+      if (data.user) authStateStorage.saveSession(data.user);
+      return data;
+    } catch {
       return null;
     } finally {
-      isRefreshing = false;
       refreshPromise = null;
     }
   })();
-
   return refreshPromise;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  return (await refreshSession())?.accessToken ?? null;
 }
 
 /**
@@ -235,18 +260,7 @@ export async function api<T = any>(endpoint: string, options: RequestOptions = {
     reqBody = JSON.stringify(json);
   }
 
-  // Attach Bearer token if available (supports local JWT & Clerk sessions)
-  let token = tokenStorage.get();
-  if (!token && typeof window !== 'undefined' && (window as any).Clerk?.session) {
-    try {
-      token = await (window as any).Clerk.session.getToken();
-      if (token) {
-        tokenStorage.set(token);
-      }
-    } catch {
-      // Ignore
-    }
-  }
+  const token = tokenStorage.get();
   if (token && !skipAuth && !reqHeaders['Authorization']) {
     reqHeaders['Authorization'] = `Bearer ${token}`;
   }
@@ -272,6 +286,8 @@ export async function api<T = any>(endpoint: string, options: RequestOptions = {
         },
       });
     }
+    // Could not renew: the session is over.
+    if (!tokenStorage.get()) sessionExpiredHandler?.();
   }
 
   // Parse response
@@ -298,166 +314,56 @@ export async function api<T = any>(endpoint: string, options: RequestOptions = {
 // -----------------------------------------------------------------------------
 // 1. Authentication API
 // -----------------------------------------------------------------------------
-export interface RegisterPayload {
+export interface StartResponse {
+  ok: boolean;
   email: string;
-  password: string;
-  name?: string;
+  message: string;
+  resendAfterSeconds: number;
 }
 
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  accessToken: string;
-  ok?: boolean;
-  stage?: string;
-  message?: string;
-  email?: string;
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-    onboardingStage?: string;
-    isEmailVerified?: boolean;
-    profileImage?: string;
-  };
-}
-
-export interface VerifyOtpPayload {
-  email: string;
-  otp: string;
+export interface SessionInfo {
+  id: string;
+  userAgent?: string;
+  ip?: string;
+  startedAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  current: boolean;
 }
 
 export const authApi = {
-  /** Register a new user and trigger OTP email */
-  register: async (payload: RegisterPayload): Promise<AuthResponse> => {
-    const data = await api<AuthResponse>('/auth/register', {
-      method: 'POST',
-      json: payload,
-      skipAuth: true,
-    });
-    if (payload.name) authStateStorage.setLastName(payload.name);
-    if (payload.email) authStateStorage.setLastEmail(payload.email);
-    authStateStorage.setStage('otp_pending');
-    if (data?.accessToken && data?.stage !== 'otp_pending') {
-      tokenStorage.set(data.accessToken);
-    }
+  /** Email a sign-in link and 6-digit code. Same response whether or not the account exists. */
+  start: async (email: string): Promise<StartResponse> => {
+    const data = await api<StartResponse>('/auth/start', { method: 'POST', json: { email }, skipAuth: true });
+    authStateStorage.setLastEmail(email);
     return data;
   },
 
-  /** Verify OTP code sent to user email */
-  verifyOtp: async (payload: VerifyOtpPayload): Promise<AuthResponse> => {
-    const data = await api<AuthResponse>('/auth/verify-otp', {
-      method: 'POST',
-      json: payload,
-      skipAuth: true,
-    });
-    if (data?.accessToken) {
-      tokenStorage.set(data.accessToken);
-    }
-    if (data?.user) {
-      authStateStorage.saveSession(data.user);
-    } else {
-      authStateStorage.setStage('profile_setup');
-    }
+  /** The emailed link was opened: confirm it is still valid and learn which address it is for. */
+  openLink: (token: string): Promise<{ email: string; expiresAt: string }> =>
+    api('/auth/link', { method: 'POST', json: { token }, skipAuth: true }),
+
+  /** Second factor: the code from the same email. Starts the session. */
+  verify: async (token: string, code: string): Promise<AuthResponse> => {
+    const data = await api<AuthResponse>('/auth/verify', { method: 'POST', json: { token, code }, skipAuth: true });
+    if (data?.accessToken) tokenStorage.set(data.accessToken);
+    if (data?.user) authStateStorage.saveSession(data.user);
     return data;
-  },
-
-  /** Resend verification OTP code */
-  resendOtp: async (email: string): Promise<{ ok: boolean; message: string }> => {
-    return api<{ ok: boolean; message: string }>('/auth/resend-otp', {
-      method: 'POST',
-      json: { email },
-      skipAuth: true,
-    });
-  },
-
-  /** Request password reset email */
-  forgotPassword: async (email: string): Promise<{ ok: boolean; message: string }> => {
-    return api<{ ok: boolean; message: string }>('/auth/forgot-password', {
-      method: 'POST',
-      json: { email },
-      skipAuth: true,
-    });
-  },
-
-  /** Submit OTP and new password */
-  resetPassword: async (email: string, otp: string, newPassword?: string): Promise<{ ok: boolean; message: string }> => {
-    return api<{ ok: boolean; message: string }>('/auth/reset-password', {
-      method: 'POST',
-      json: { email, otp, newPassword },
-      skipAuth: true,
-    });
   },
 
   /** Get authenticated user profile & onboarding stage */
-  getMe: async (): Promise<{
-    id: string;
-    email: string;
-    name?: string;
-    isEmailVerified?: boolean;
-    onboardingStage?: string;
-    profileImage?: string;
-  }> => {
-    return api('/auth/me');
-  },
+  getMe: async (): Promise<SessionUser> => api('/auth/me'),
 
   /** Update current onboarding stage */
   updateOnboardingStage: async (stage: 'otp_pending' | 'profile_setup' | 'completed'): Promise<{ ok: boolean; stage: string }> => {
     authStateStorage.setStage(stage);
-    return api('/auth/onboarding-stage', {
-      method: 'PUT',
-      json: { stage },
-    });
+    return api('/auth/onboarding-stage', { method: 'PUT', json: { stage } });
   },
 
-  /** Login existing user */
-  login: async (payload: LoginPayload): Promise<AuthResponse> => {
-    const data = await api<AuthResponse>('/auth/login', {
-      method: 'POST',
-      json: payload,
-      skipAuth: true,
-    });
-    if (data?.accessToken) {
-      tokenStorage.set(data.accessToken);
-    }
-    if (data?.user) {
-      authStateStorage.saveSession(data.user);
-    }
-    return data;
-  },
+  /** Renew the access token from the refresh cookie. Resolves null when there is no live session. */
+  refresh: refreshSession,
 
-  /** Google OAuth authentication (creates or logs in user, verifies email, issues JWT) */
-  googleLogin: async (payload: { email: string; name?: string; avatarUrl?: string }): Promise<AuthResponse> => {
-    const data = await api<AuthResponse>('/auth/google', {
-      method: 'POST',
-      json: payload,
-      skipAuth: true,
-    });
-    if (data?.accessToken) {
-      tokenStorage.set(data.accessToken);
-    }
-    if (data?.user) {
-      authStateStorage.saveSession(data.user);
-    }
-    return data;
-  },
-
-  /** Refresh access token using HTTP-only cookie */
-  refresh: async (): Promise<AuthResponse> => {
-    const data = await api<AuthResponse>('/auth/refresh', {
-      method: 'POST',
-      skipAuth: true,
-    });
-    if (data?.accessToken) {
-      tokenStorage.set(data.accessToken);
-    }
-    return data;
-  },
-
-  /** Logout current session */
+  /** Sign out this device */
   logout: async (): Promise<void> => {
     try {
       await api('/auth/logout', { method: 'POST', skipAuth: true });
@@ -466,17 +372,21 @@ export const authApi = {
     }
   },
 
-  /** Check if user has an active token stored */
+  /** Sign out every device */
+  logoutAll: async (): Promise<void> => {
+    try {
+      await api('/auth/logout-all', { method: 'POST' });
+    } finally {
+      tokenStorage.clear();
+    }
+  },
+
+  /** Devices currently signed in */
+  sessions: async (): Promise<SessionInfo[]> => (await api<{ sessions: SessionInfo[] }>('/auth/sessions')).sessions,
+
+  revokeSession: (id: string): Promise<void> => api(`/auth/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   isAuthenticated: (): boolean => tokenStorage.hasToken(),
-
-  /** Get token */
-  getToken: (): string | null => tokenStorage.get(),
-
-  /** Set token manually */
-  setToken: (token: string): void => tokenStorage.set(token),
-
-  /** Clear token */
-  clearToken: (): void => tokenStorage.clear(),
 };
 
 // -----------------------------------------------------------------------------
@@ -649,7 +559,12 @@ export const applicationsApi = {
 // 5. Tasks API ("Needs You" Queue)
 // -----------------------------------------------------------------------------
 export interface AnswerTaskPayload {
-  answer: string;
+  /** One answer per question, keyed by the question's `key`. */
+  answers?: Record<string, string>;
+  /** Which of those answers to remember for future applications, keyed the same way. */
+  remember?: Record<string, boolean>;
+  /** Single-answer shorthand. */
+  answer?: string;
   saveToBank?: boolean;
 }
 
@@ -737,10 +652,10 @@ export const meApi = {
   },
 
   /** Permanently delete account and all data */
-  deleteAccount: async (password: string): Promise<void> => {
+  deleteAccount: async (confirmEmail: string): Promise<void> => {
     await api('/me', {
       method: 'DELETE',
-      json: { password },
+      json: { confirmEmail },
     });
     tokenStorage.clear();
   },
