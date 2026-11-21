@@ -1,367 +1,307 @@
-import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { randomToken, sha256 } from '../lib/crypto';
 import { AppError } from '../lib/http';
+import { LoginChallenge } from '../models/loginChallenge.model';
 import { Profile } from '../models/profile.model';
 import { RefreshToken } from '../models/refreshToken.model';
 import { User } from '../models/user.model';
 import { emailService } from './email.service';
 
+const DAY = 864e5;
+const CODE_TTL_MS = 10 * 60_000;
+const MAX_CODE_ATTEMPTS = 5;
+const RESEND_COOLDOWN_MS = 30_000;
+const SEND_WINDOW_MS = 15 * 60_000;
+const MAX_SENDS_PER_WINDOW = 5;
+/** A just-rotated refresh token is still honoured briefly, so two tabs refreshing together don't kill the session. */
+const ROTATION_GRACE_MS = 10_000;
+
+export interface ClientMeta {
+  ip?: string;
+  userAgent?: string;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name?: string;
+  onboardingStage?: string;
+  isEmailVerified?: boolean;
+  profileImage?: string;
+}
+
 export interface Tokens {
   accessToken: string;
   refreshToken: string;
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-    onboardingStage?: string;
-    isEmailVerified?: boolean;
-    profileImage?: string;
+  refreshExpiresAt: Date;
+  expiresIn: number;
+  stage: string;
+  user: SessionUser;
+}
+
+const hmac = (value: string): string => crypto.createHmac('sha256', env.JWT_ACCESS_SECRET).update(value).digest('hex');
+const codeHash = (email: string, code: string): string => hmac(`${email}:${code}`);
+const safeEqual = (a: string, b: string): boolean => {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+};
+
+const toSessionUser = (user: any): SessionUser => ({
+  id: String(user.id || user._id),
+  email: user.email,
+  name: user.name,
+  onboardingStage: user.onboardingStage || 'completed',
+  isEmailVerified: user.isEmailVerified ?? false,
+  profileImage: user.profileImage,
+});
+
+const signAccess = (userId: string, stage: string) =>
+  jwt.sign({ stage }, env.JWT_ACCESS_SECRET, {
+    subject: userId,
+    audience: 'javi-api',
+    expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
+  });
+
+interface SessionSeed {
+  family: string;
+  sessionStartedAt: Date;
+  absoluteExpiresAt: Date;
+}
+
+/** Issue an access token plus a fresh refresh token. The refresh token's idle window never outlives the absolute cap. */
+async function issueTokens(user: any, meta: ClientMeta, seed?: SessionSeed): Promise<Tokens> {
+  const now = new Date();
+  const session: SessionSeed = seed ?? {
+    family: randomToken(16),
+    sessionStartedAt: now,
+    absoluteExpiresAt: new Date(now.getTime() + env.SESSION_ABSOLUTE_DAYS * DAY),
+  };
+  const refreshToken = randomToken();
+  const refreshExpiresAt = new Date(
+    Math.min(now.getTime() + env.SESSION_IDLE_DAYS * DAY, session.absoluteExpiresAt.getTime()),
+  );
+  await RefreshToken.create({
+    userId: user._id ?? user.id,
+    tokenHash: sha256(refreshToken),
+    family: session.family,
+    expiresAt: refreshExpiresAt,
+    absoluteExpiresAt: session.absoluteExpiresAt,
+    sessionStartedAt: session.sessionStartedAt,
+    lastUsedAt: now,
+    userAgent: meta.userAgent?.slice(0, 300),
+    ip: meta.ip,
+  });
+  const sessionUser = toSessionUser(user);
+  const stage = sessionUser.onboardingStage || 'completed';
+  return {
+    accessToken: signAccess(sessionUser.id, stage),
+    refreshToken,
+    refreshExpiresAt,
+    expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
+    stage,
+    user: sessionUser,
   };
 }
 
-const signAccess = (userId: string, stage = 'completed') =>
-  jwt.sign(
-    { stage },
-    env.JWT_ACCESS_SECRET,
-    { subject: userId, audience: 'javi-api', expiresIn: env.ACCESS_TOKEN_TTL_SECONDS },
-  );
-
-async function issueTokens(userId: string, stage = 'completed', family = randomToken(16)): Promise<Tokens> {
-  const refreshToken = randomToken();
-  await RefreshToken.create({
-    userId,
-    tokenHash: sha256(refreshToken),
-    family,
-    expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_DAYS * 864e5),
-  });
-  return { accessToken: signAccess(userId, stage), refreshToken };
-}
-
-export interface RegisterResult extends Tokens {
-  ok: boolean;
+export interface StartResult {
+  ok: true;
   email: string;
-  stage: 'otp_pending';
-  otpCode: string;
   message: string;
+  resendAfterSeconds: number;
 }
 
-export async function register(email: string, password: string, name?: string): Promise<RegisterResult> {
+/**
+ * Begin passwordless sign-in/sign-up. Always answers the same way so it can't be used to discover which emails
+ * have accounts. Sends are throttled per email; a throttled request is silently dropped.
+ */
+export async function startSignIn(email: string, meta: ClientMeta, name?: string): Promise<StartResult> {
   const normalizedEmail = email.toLowerCase().trim();
-  const existing = await User.findOne({ email: normalizedEmail });
+  const result: StartResult = {
+    ok: true,
+    email: normalizedEmail,
+    message: 'If that address can receive email, a sign-in link and code are on their way.',
+    resendAfterSeconds: RESEND_COOLDOWN_MS / 1000,
+  };
 
-  if (existing && existing.isEmailVerified) {
-    throw new AppError(409, 'An account with this email already exists');
-  }
+  const now = Date.now();
+  const previous = await LoginChallenge.find({ email: normalizedEmail });
+  const recent = previous.filter((c: any) => now - new Date(c.createdAt ?? 0).getTime() < SEND_WINDOW_MS);
+  const newest = recent.reduce<number>((t, c: any) => Math.max(t, new Date(c.createdAt ?? 0).getTime()), 0);
+  if (recent.length >= MAX_SENDS_PER_WINDOW || now - newest < RESEND_COOLDOWN_MS) return result;
 
-  // Generate 6-digit OTP code (valid 10 minutes)
-  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-  let user = existing;
-  if (user) {
-    user.passwordHash = await bcrypt.hash(password, 12);
-    user.name = name || user.name;
-    user.otp = { code: otpCode, expiresAt, attempts: 0 };
-    user.onboardingStage = 'otp_pending';
-    if (user.save) await user.save();
-  } else {
+  let user: any = await User.findOne({ email: normalizedEmail });
+  if (!user) {
     user = await User.create({
       email: normalizedEmail,
-      passwordHash: await bcrypt.hash(password, 12),
       name,
       isEmailVerified: false,
       onboardingStage: 'otp_pending',
-      otp: { code: otpCode, expiresAt, attempts: 0 },
       consent: { termsAcceptedAt: new Date() },
     });
     await Profile.create({ userId: user._id, fullName: name ?? '', email: normalizedEmail, status: 'draft' });
   }
 
-  // Send OTP verification email via Nodemailer
-  await emailService.sendOtpEmail(normalizedEmail, otpCode, name);
+  // Only the newest challenge can be used.
+  for (const c of previous as any[]) {
+    if (!c.consumedAt) {
+      c.consumedAt = new Date();
+      await c.save();
+    }
+  }
 
-  const tokens = await issueTokens(String(user.id || user._id), 'otp_pending');
-
-  return {
-    ...tokens,
-    ok: true,
+  const code = String(crypto.randomInt(100000, 1000000));
+  const linkToken = randomToken(32);
+  await LoginChallenge.create({
     email: normalizedEmail,
-    stage: 'otp_pending',
-    otpCode,
-    message: 'Verification code sent to your email',
-    user: {
-      id: String(user.id || user._id),
-      email: user.email,
-      name: user.name,
-      onboardingStage: 'otp_pending',
-      isEmailVerified: false,
-    },
-  };
+    codeHash: codeHash(normalizedEmail, code),
+    linkTokenHash: sha256(linkToken),
+    expiresAt: new Date(now + CODE_TTL_MS),
+    attempts: 0,
+    ip: meta.ip,
+    userAgent: meta.userAgent?.slice(0, 300),
+  });
+
+  const linkUrl = `${env.APP_URL.replace(/\/$/, '')}/auth/verify?token=${encodeURIComponent(linkToken)}`;
+  await emailService.sendSignInEmail(normalizedEmail, code, linkUrl, user.name);
+  return result;
 }
 
-export async function verifyOtp(email: string, otp: string): Promise<Tokens> {
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) throw new AppError(404, 'User not found');
+async function findLiveChallenge(linkToken: string): Promise<any> {
+  const matches = await LoginChallenge.find({ linkTokenHash: sha256(linkToken) });
+  const challenge: any = matches[0];
+  if (!challenge || challenge.consumedAt) throw new AppError(400, 'This sign-in link is no longer valid. Request a new one.');
+  if (new Date(challenge.expiresAt) < new Date()) throw new AppError(400, 'This sign-in link has expired. Request a new one.');
+  return challenge;
+}
 
-  const cleanOtp = (otp || '').trim();
-  const isMasterBypass = cleanOtp === '123456';
-  const matches = isMasterBypass || (user.otp && user.otp.code === cleanOtp);
+/** The emailed link was opened. Confirms it is live and tells the page which address to show; does not sign in. */
+export async function openLink(linkToken: string): Promise<{ email: string; expiresAt: Date }> {
+  const challenge = await findLiveChallenge(linkToken);
+  if (!challenge.linkOpenedAt) {
+    challenge.linkOpenedAt = new Date();
+    await challenge.save();
+  }
+  return { email: challenge.email, expiresAt: challenge.expiresAt };
+}
 
-  if (!matches) {
-    if (user.otp) {
-      user.otp.attempts = (user.otp.attempts || 0) + 1;
-      if (user.save) await user.save();
-    }
-    throw new AppError(400, 'Invalid verification code. Please check your email and try again.');
+/** Both factors: the link token (proves this is the emailed challenge) and the code (proves inbox access). */
+export async function verifySignIn(linkToken: string, code: string, meta: ClientMeta): Promise<Tokens> {
+  const challenge = await findLiveChallenge(linkToken);
+  const cleanCode = (code || '').replace(/\s/g, '');
+
+  if (!safeEqual(codeHash(challenge.email, cleanCode), challenge.codeHash)) {
+    challenge.attempts = (challenge.attempts || 0) + 1;
+    if (challenge.attempts >= MAX_CODE_ATTEMPTS) challenge.consumedAt = new Date();
+    await challenge.save();
+    throw new AppError(
+      400,
+      challenge.attempts >= MAX_CODE_ATTEMPTS
+        ? 'Too many wrong codes. Request a new sign-in email.'
+        : 'That code is not right. Check your email and try again.',
+    );
   }
 
-  // Check expiration if not master bypass
-  if (!isMasterBypass && user.otp?.expiresAt && new Date(user.otp.expiresAt) < new Date()) {
-    throw new AppError(400, 'Verification code has expired. Please request a new code.');
-  }
+  challenge.consumedAt = new Date();
+  await challenge.save();
 
+  const user: any = await User.findOne({ email: challenge.email });
+  if (!user) throw new AppError(404, 'Account not found');
   user.isEmailVerified = true;
-  user.onboardingStage = 'profile_setup';
-  user.otp = undefined as any;
-  if (user.save) await user.save();
+  if (!user.onboardingStage || user.onboardingStage === 'otp_pending') user.onboardingStage = 'profile_setup';
+  await user.save();
 
-  const tokens = await issueTokens(String(user.id || user._id), 'profile_setup');
-  return {
-    ...tokens,
-    user: {
-      id: String(user.id || user._id),
-      email: user.email,
-      name: user.name,
-      onboardingStage: 'profile_setup',
-      isEmailVerified: true,
-      profileImage: user.profileImage,
-    },
-  };
+  return issueTokens(user, meta);
 }
 
-export async function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) {
-    // Return friendly generic message without leaking account existence
-    return { ok: true, message: 'If an account exists with this email, password reset instructions have been sent.' };
+/**
+ * Exchange a refresh token for a new pair, sliding the idle window forward. Rejects past the absolute cap.
+ * Presenting a token that was rotated long ago means it leaked: the whole session is closed.
+ */
+export async function rotate(refreshToken: string, meta: ClientMeta): Promise<Tokens> {
+  const now = new Date();
+  const matches = await RefreshToken.find({ tokenHash: sha256(refreshToken) });
+  const doc: any = matches[0];
+  if (!doc) throw new AppError(401, 'Session expired, please sign in again');
+
+  if (doc.revokedAt && !doc.rotatedAt) throw new AppError(401, 'Session was signed out, please sign in again');
+  if (doc.rotatedAt && now.getTime() - new Date(doc.rotatedAt).getTime() > ROTATION_GRACE_MS) {
+    await RefreshToken.updateMany({ family: doc.family }, { revokedAt: now });
+    throw new AppError(401, 'Session was reused and has been closed, please sign in again');
+  }
+  if (new Date(doc.expiresAt) < now || new Date(doc.absoluteExpiresAt) < now) {
+    throw new AppError(401, 'Session expired, please sign in again');
   }
 
-  const resetCode = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  const user: any = await User.findById(doc.userId);
+  if (!user) throw new AppError(401, 'Session expired, please sign in again');
 
-  user.otp = { code: resetCode, expiresAt, attempts: 0 };
-  if (user.save) await user.save();
-
-  await emailService.sendOtpEmail(normalizedEmail, resetCode, user.name);
-  return { ok: true, message: 'Password reset code has been sent to your email.' };
-}
-
-export async function resetPassword(
-  email: string,
-  otp: string,
-  newPassword?: string
-): Promise<{ ok: boolean; message: string }> {
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) {
-    throw new AppError(404, 'User not found');
+  if (!doc.rotatedAt) {
+    doc.rotatedAt = now;
+    doc.revokedAt = now;
+    await doc.save();
   }
-
-  const isMasterBypass = otp === '123456';
-  if (!isMasterBypass && (!user.otp || user.otp.code !== otp.trim())) {
-    throw new AppError(400, 'Invalid verification code');
-  }
-
-  if (!isMasterBypass && user.otp?.expiresAt && new Date(user.otp.expiresAt) < new Date()) {
-    throw new AppError(400, 'Verification code has expired. Please request a new code.');
-  }
-
-  if (newPassword && newPassword.length >= 8) {
-    user.passwordHash = await bcrypt.hash(newPassword, 12);
-  }
-  user.otp = undefined as any;
-  if (user.save) await user.save();
-
-  return { ok: true, message: 'Password reset successfully. You can now log in.' };
-}
-
-export async function resendOtp(email: string): Promise<{ ok: boolean; message: string }> {
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) throw new AppError(404, 'User not found');
-
-  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-  user.otp = { code: otpCode, expiresAt, attempts: 0 };
-  if (user.save) await user.save();
-
-  await emailService.sendOtpEmail(normalizedEmail, otpCode, user.name);
-  return { ok: true, message: 'New verification code sent' };
-}
-
-export async function updateOnboardingStage(userId: string, stage: 'otp_pending' | 'profile_setup' | 'completed'): Promise<{ ok: boolean; stage: string }> {
-  const user = await User.findById(userId);
-  if (!user) throw new AppError(404, 'User not found');
-
-  user.onboardingStage = stage;
-  if (stage === 'completed') {
-    user.isEmailVerified = true;
-  }
-  if (user.save) await user.save();
-
-  return { ok: true, stage };
-}
-
-export const DEMO_USER_EMAILS = [
-  'amaka.okafor@example.com',
-  'you@example.com',
-  'candidate@javi.ai',
-  'test@javi.ai',
-  'ada@example.com',
-  'ada.okafor@example.com',
-];
-
-export async function login(email: string, password: string): Promise<Tokens> {
-  const normalizedEmail = (email || '').toLowerCase().trim();
-  let user = await User.findOne({ email: normalizedEmail });
-
-  // If user does not exist but is one of our recognized seed/demo accounts, auto-provision on-the-fly
-  if (!user && DEMO_USER_EMAILS.includes(normalizedEmail)) {
-    const isAmaka = normalizedEmail.includes('amaka');
-    const isAngelica = normalizedEmail.includes('candidate');
-    const name = isAmaka ? 'Amaka Okafor' : isAngelica ? 'Angelica Greeze' : 'Ada Okafor';
-    const pwdHash = await bcrypt.hash('password123', 10);
-    user = await User.create({
-      email: normalizedEmail,
-      passwordHash: pwdHash,
-      name,
-      consent: { termsAcceptedAt: new Date() },
-      role: 'candidate',
-      status: 'active',
-    });
-    const existingProfile = await Profile.findOne({ userId: user._id || user.id });
-    if (!existingProfile) {
-      await Profile.create({
-        userId: user._id || user.id,
-        fullName: name,
-        firstName: name.split(' ')[0],
-        lastName: name.split(' ')[1] || '',
-        email: normalizedEmail,
-        headline: 'Senior Product Designer',
-        status: 'verified',
-      });
-    }
-  }
-
-  if (!user) {
-    throw new AppError(404, 'No email or password found for this user');
-  }
-
-  const isDemo = DEMO_USER_EMAILS.includes(normalizedEmail);
-  const isMatch =
-    (await bcrypt.compare(password, user.passwordHash)) ||
-    (isDemo && (password.toLowerCase() === 'password123' || password === 'Password123!'));
-
-  if (!isMatch) {
-    throw new AppError(401, 'Wrong Password');
-  }
-
-  const stage = user.onboardingStage || (user.isEmailVerified ? 'completed' : 'otp_pending');
-  const tokens = await issueTokens(String(user.id || user._id), stage);
-  return {
-    ...tokens,
-    user: {
-      id: String(user.id || user._id),
-      email: user.email,
-      name: user.name,
-      onboardingStage: stage,
-      isEmailVerified: user.isEmailVerified ?? true,
-      profileImage: user.profileImage,
-    },
-  };
-}
-
-export async function loginGoogle(email: string, name?: string, avatarUrl?: string): Promise<Tokens> {
-  const normalizedEmail = (email || '').toLowerCase().trim();
-  if (!normalizedEmail) throw new AppError(400, 'Email is required');
-
-  let user = await User.findOne({ email: normalizedEmail });
-
-  if (!user) {
-    const defaultPassword = await bcrypt.hash(randomToken(16), 10);
-    user = await User.create({
-      email: normalizedEmail,
-      passwordHash: defaultPassword,
-      name: name || 'Candidate',
-      isEmailVerified: true,
-      onboardingStage: 'profile_setup',
-      profileImage: avatarUrl,
-      consent: { termsAcceptedAt: new Date() },
-    });
-
-    const existingProfile = await Profile.findOne({ userId: user._id || user.id });
-    if (!existingProfile) {
-      await Profile.create({
-        userId: user._id || user.id,
-        fullName: name || 'Candidate',
-        firstName: (name || '').split(' ')[0] || 'Candidate',
-        lastName: (name || '').split(' ').slice(1).join(' ') || '',
-        email: normalizedEmail,
-        avatarUrl,
-        status: 'draft',
-      });
-    }
-  } else {
-    user.isEmailVerified = true;
-    if (name && !user.name) user.name = name;
-    if (avatarUrl && !user.profileImage) user.profileImage = avatarUrl;
-    if (user.save) await user.save();
-  }
-
-  const stage = user.onboardingStage || 'profile_setup';
-  const tokens = await issueTokens(String(user.id || user._id), stage);
-
-  return {
-    ...tokens,
-    user: {
-      id: String(user.id || user._id),
-      email: user.email,
-      name: user.name,
-      onboardingStage: stage,
-      isEmailVerified: true,
-      profileImage: user.profileImage || avatarUrl,
-    },
-  };
-}
-/** Rotation with reuse detection: presenting an already-rotated token revokes the whole family. */
-export async function rotate(refreshToken: string): Promise<Tokens> {
-  const doc = await RefreshToken.findOne({ tokenHash: sha256(refreshToken) });
-  if (!doc || doc.expiresAt < new Date()) throw new AppError(401, 'Session expired, please log in again');
-  if (doc.revokedAt) {
-    await RefreshToken.updateMany({ family: doc.family }, { revokedAt: new Date() });
-    throw new AppError(401, 'Session was reused and has been closed, please log in again');
-  }
-  doc.revokedAt = new Date();
-  await doc.save();
-  return issueTokens(String(doc.userId), doc.family);
+  return issueTokens(user, meta, {
+    family: doc.family,
+    sessionStartedAt: new Date(doc.sessionStartedAt),
+    absoluteExpiresAt: new Date(doc.absoluteExpiresAt),
+  });
 }
 
 export async function logout(refreshToken: string): Promise<void> {
-  const doc = await RefreshToken.findOne({ tokenHash: sha256(refreshToken) });
+  const matches = await RefreshToken.find({ tokenHash: sha256(refreshToken) });
+  const doc: any = matches[0];
   if (doc) await RefreshToken.updateMany({ family: doc.family }, { revokedAt: new Date() });
 }
 
-export async function verifyPassword(userId: string, password: string): Promise<void> {
+export interface SessionInfo {
+  id: string;
+  userAgent?: string;
+  ip?: string;
+  startedAt: Date;
+  lastUsedAt: Date;
+  expiresAt: Date;
+  current: boolean;
+}
+
+/** One entry per signed-in device: the newest live refresh token of each family. */
+export async function listSessions(userId: string, currentRefreshToken?: string): Promise<SessionInfo[]> {
+  const now = new Date();
+  const docs = (await RefreshToken.find({ userId })) as any[];
+  const currentFamily = currentRefreshToken
+    ? docs.find((d) => d.tokenHash === sha256(currentRefreshToken))?.family
+    : undefined;
+  return docs
+    .filter((d) => !d.revokedAt && new Date(d.expiresAt) > now)
+    .map((d) => ({
+      id: d.family,
+      userAgent: d.userAgent,
+      ip: d.ip,
+      startedAt: d.sessionStartedAt,
+      lastUsedAt: d.lastUsedAt,
+      expiresAt: d.expiresAt,
+      current: d.family === currentFamily,
+    }))
+    .sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime());
+}
+
+export async function revokeSession(userId: string, family: string): Promise<void> {
+  await RefreshToken.updateMany({ userId, family }, { revokedAt: new Date() });
+}
+
+export async function revokeAllSessions(userId: string): Promise<void> {
+  await RefreshToken.updateMany({ userId }, { revokedAt: new Date() });
+}
+
+export async function updateOnboardingStage(
+  userId: string,
+  stage: 'otp_pending' | 'profile_setup' | 'completed',
+): Promise<{ ok: boolean; stage: string }> {
   const user = await User.findById(userId);
-  if (!user) throw new AppError(401, 'Wrong password');
-  const isDemo = user.email && DEMO_USER_EMAILS.includes(user.email.toLowerCase());
-  const isMatch =
-    (await bcrypt.compare(password, user.passwordHash)) ||
-    (isDemo && (password.toLowerCase() === 'password123' || password === 'Password123!'));
-  if (!isMatch) throw new AppError(401, 'Wrong password');
+  if (!user) throw new AppError(404, 'User not found');
+  user.onboardingStage = stage;
+  await user.save();
+  return { ok: true, stage };
 }
