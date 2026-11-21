@@ -23,12 +23,11 @@ const schema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   STORAGE_DIR: z.string().default('./storage'),
 
-  CLERK_SECRET_KEY: z.string().default(() => process.env.CLERK_SECRET_KEY || ''),
-  CLERK_PUBLISHABLE_KEY: z.string().default(() => process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || ''),
-
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().default(900),
-  REFRESH_TOKEN_DAYS: z.coerce.number().default(30),
+  // A session ends after this many days without use, or this many days after sign-in, whichever is first.
+  SESSION_IDLE_DAYS: z.coerce.number().default(30),
+  SESSION_ABSOLUTE_DAYS: z.coerce.number().default(90),
   TOKEN_ENC_KEY: z
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOKEN_ENC_KEY must be 32 random bytes, base64-encoded'),
