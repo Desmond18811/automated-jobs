@@ -5,143 +5,115 @@ import { AppError, parseBody } from '../lib/http';
 import { currentUser } from '../middleware/auth';
 import { User } from '../models/user.model';
 import {
-  login,
-  loginGoogle,
+  listSessions,
   logout,
-  register,
+  openLink,
+  revokeAllSessions,
+  revokeSession,
   rotate,
-  verifyOtp,
-  resendOtp,
-  forgotPassword,
-  resetPassword,
+  startSignIn,
   updateOnboardingStage,
+  verifySignIn,
+  type ClientMeta,
   type Tokens,
 } from '../services/auth.service';
 
 export const COOKIE = 'javi_rt';
-export const cookieOpts: CookieOptions = {
+const baseCookie: CookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  // Lax so the cookie survives the top-level navigation from the emailed link.
+  sameSite: 'lax',
   path: '/',
-  maxAge: env.REFRESH_TOKEN_DAYS * 864e5,
 };
 
-export const RegisterSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8).max(200),
-  name: z.string().max(120).optional(),
+export const StartSchema = z.object({
+  email: z.string().trim().email().max(254),
+  name: z.string().trim().max(120).optional(),
 });
 
-export const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
+export const OpenLinkSchema = z.object({ token: z.string().min(16).max(200) });
 
-export const GoogleLoginSchema = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  avatarUrl: z.string().optional(),
-});
-
-export const VerifyOtpSchema = z.object({
-  email: z.string().email(),
-  otp: z.string().min(4).max(10),
-});
-
-export const ResendOtpSchema = z.object({
-  email: z.string().email(),
-});
-
-export const ForgotPasswordSchema = z.object({
-  email: z.string().email(),
-});
-
-export const ResetPasswordSchema = z.object({
-  email: z.string().email(),
-  otp: z.string().min(4).max(10),
-  newPassword: z.string().min(8).max(200).optional(),
+export const VerifySchema = z.object({
+  token: z.string().min(16).max(200),
+  code: z.string().min(4).max(12),
 });
 
 export const UpdateStageSchema = z.object({
   stage: z.enum(['otp_pending', 'profile_setup', 'completed']),
 });
 
-const replyWithTokens = (res: Response, tokens: any, status = 200) =>
-  res.cookie(COOKIE, tokens.refreshToken, cookieOpts).status(status).json({
-    accessToken: tokens.accessToken,
-    user: tokens.user,
-    ok: tokens.ok ?? true,
-    stage: tokens.stage,
-    message: tokens.message,
-  });
+const meta = (req: Request): ClientMeta => ({ ip: req.ip, userAgent: req.get('user-agent') ?? undefined });
+
+/** Sets the sliding refresh cookie. Its lifetime tracks the session's idle window, so activity keeps it alive. */
+const replyWithTokens = (res: Response, tokens: Tokens, status = 200) =>
+  res
+    .cookie(COOKIE, tokens.refreshToken, {
+      ...baseCookie,
+      maxAge: Math.max(0, tokens.refreshExpiresAt.getTime() - Date.now()),
+    })
+    .status(status)
+    .json({
+      accessToken: tokens.accessToken,
+      expiresIn: tokens.expiresIn,
+      user: tokens.user,
+      stage: tokens.stage,
+    });
 
 export class AuthController {
-  static async register(req: Request, res: Response) {
-    const b = parseBody(RegisterSchema, req.body);
-    const tokens = await register(b.email, b.password, b.name);
-    replyWithTokens(res, tokens, 201);
+  static async start(req: Request, res: Response) {
+    const b = parseBody(StartSchema, req.body);
+    res.json(await startSignIn(b.email, meta(req), b.name));
   }
 
-  static async login(req: Request, res: Response) {
-    const b = parseBody(LoginSchema, req.body);
-    const tokens = await login(b.email, b.password);
-    replyWithTokens(res, tokens);
+  static async openLink(req: Request, res: Response) {
+    const b = parseBody(OpenLinkSchema, req.body);
+    res.json(await openLink(b.token));
   }
 
-  static async googleLogin(req: Request, res: Response) {
-    const b = parseBody(GoogleLoginSchema, req.body);
-    const tokens = await loginGoogle(b.email, b.name, b.avatarUrl);
-    replyWithTokens(res, tokens);
-  }
-
-  static async verifyOtp(req: Request, res: Response) {
-    const b = parseBody(VerifyOtpSchema, req.body);
-    const tokens = await verifyOtp(b.email, b.otp);
-    replyWithTokens(res, tokens, 200);
-  }
-
-  static async resendOtp(req: Request, res: Response) {
-    const b = parseBody(ResendOtpSchema, req.body);
-    const result = await resendOtp(b.email);
-    res.json(result);
-  }
-
-  static async forgotPassword(req: Request, res: Response) {
-    const b = parseBody(ForgotPasswordSchema, req.body);
-    const result = await forgotPassword(b.email);
-    res.json(result);
-  }
-
-  static async resetPassword(req: Request, res: Response) {
-    const b = parseBody(ResetPasswordSchema, req.body);
-    const result = await resetPassword(b.email, b.otp, b.newPassword);
-    res.json(result);
-  }
-
-  static async updateOnboardingStage(req: Request, res: Response) {
-    const userId = currentUser(req);
-    const b = parseBody(UpdateStageSchema, req.body);
-    const result = await updateOnboardingStage(userId, b.stage);
-    res.json(result);
+  static async verify(req: Request, res: Response) {
+    const b = parseBody(VerifySchema, req.body);
+    replyWithTokens(res, await verifySignIn(b.token, b.code, meta(req)));
   }
 
   static async refresh(req: Request, res: Response) {
     const token = req.cookies?.[COOKIE];
     if (!token) throw new AppError(401, 'No session');
-    const tokens = await rotate(token);
-    replyWithTokens(res, tokens);
+    try {
+      replyWithTokens(res, await rotate(token, meta(req)));
+    } catch (err) {
+      res.clearCookie(COOKIE, baseCookie);
+      throw err;
+    }
   }
 
   static async logout(req: Request, res: Response) {
     const token = req.cookies?.[COOKIE];
     if (token) await logout(token);
-    res.clearCookie(COOKIE, { path: '/' }).status(204).end();
+    res.clearCookie(COOKIE, baseCookie).status(204).end();
+  }
+
+  static async logoutAll(req: Request, res: Response) {
+    await revokeAllSessions(currentUser(req));
+    res.clearCookie(COOKIE, baseCookie).status(204).end();
+  }
+
+  static async sessions(req: Request, res: Response) {
+    res.json({ sessions: await listSessions(currentUser(req), req.cookies?.[COOKIE]) });
+  }
+
+  static async revokeSession(req: Request, res: Response) {
+    await revokeSession(currentUser(req), String(req.params.id));
+    res.status(204).end();
+  }
+
+  static async updateOnboardingStage(req: Request, res: Response) {
+    const b = parseBody(UpdateStageSchema, req.body);
+    res.json(await updateOnboardingStage(currentUser(req), b.stage));
   }
 
   static async me(req: Request, res: Response) {
-    const userId = currentUser(req);
-    const user = await User.findById(userId).select('-passwordHash').lean();
+    const user = await User.findById(currentUser(req)).lean();
     if (!user) throw new AppError(404, 'User not found');
     res.json({
       id: user._id,
