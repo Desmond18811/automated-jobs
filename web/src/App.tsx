@@ -1,5 +1,6 @@
 import { Component, type FC, type ReactNode, type ErrorInfo } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { DotGrid, CornerGlow, StageFrame } from '@/components/layout/Background';
 import { useStageScale, useIsMobile } from '@/hooks/useStageScale';
@@ -12,9 +13,10 @@ import { TailorPage } from '@/pages/TailorPage';
 import { PricingPage } from '@/pages/PricingPage';
 import { FaqPage } from '@/pages/FaqPage';
 import { SignInPage } from '@/pages/SignInPage';
-import { SignUpPage } from '@/pages/SignUpPage';
-import { VerifyOtpPage } from '@/pages/VerifyOtpPage';
-import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
+import { VerifyLinkPage } from '@/pages/VerifyLinkPage';
+import { RequireSession } from '@/components/auth/RequireSession';
+import { onSessionExpired } from '@/api';
+import { startSessionKeepAlive } from '@/lib/session';
 import { WaitlistPage } from '@/pages/WaitlistPage';
 import { ProfileSetupPage } from '@/pages/profile-setup/ProfileSetupPage';
 import { ReplyPage } from '@/pages/ReplyPage';
@@ -24,17 +26,28 @@ const AppContent: FC = () => {
   const scale = useStageScale();
   const isMobile = useIsMobile();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
-  const isDashboard = pathname === '/dash' || pathname === '/dashboard';
+  // Keep signed-in tabs signed in, and send people to sign-in (remembering where they were) if a session ends.
+  useEffect(() => {
+    const stop = startSessionKeepAlive();
+    onSessionExpired(() => {
+      if (/^\/(signin|signup|auth)/.test(window.location.pathname)) return;
+      navigate(`/signin?next=${encodeURIComponent(window.location.pathname + window.location.search)}`, { replace: true });
+    });
+    return () => {
+      stop();
+      onSessionExpired(null);
+    };
+  }, [navigate]);
+
+  const isDashboard = pathname === '/dash' || pathname.startsWith('/dash/') || pathname === '/dashboard';
   const isAuthOrSetup =
     pathname === '/signin' ||
     pathname === '/signup' ||
-    pathname === '/verify-otp' ||
-    pathname === '/forgot-password' ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/setup') ||
-    pathname.startsWith('/r/') ||
-    pathname.startsWith('/forgot-password');
+    pathname.startsWith('/r/');
   const isStandalone = isDashboard || isAuthOrSetup;
 
   return (
@@ -58,16 +71,13 @@ const AppContent: FC = () => {
         >
           <Routes>
             <Route path="/signin" element={<SignInPage />} />
-            <Route path="/signup" element={<SignUpPage />} />
-            <Route path="/auth/signin" element={<SignInPage />} />
-            <Route path="/auth/signup" element={<SignUpPage />} />
-            <Route path="/verify-otp" element={<VerifyOtpPage />} />
-            <Route path="/auth/verify-otp" element={<VerifyOtpPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/dash" element={<DashboardPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/setup" element={<ProfileSetupPage />} />
+            <Route path="/signup" element={<Navigate to="/signin" replace />} />
+            <Route path="/auth/signin" element={<Navigate to="/signin" replace />} />
+            <Route path="/auth/signup" element={<Navigate to="/signin" replace />} />
+            <Route path="/auth/verify" element={<VerifyLinkPage />} />
+            <Route path="/dash/*" element={<RequireSession><DashboardPage /></RequireSession>} />
+            <Route path="/dashboard" element={<Navigate to="/dash" replace />} />
+            <Route path="/setup" element={<RequireSession><ProfileSetupPage /></RequireSession>} />
             <Route path="/r/:token" element={<ReplyPage />} />
           </Routes>
         </div>
