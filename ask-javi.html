@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.V.I — Ask J.A.V.I</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F6F9}
+a{color:#141414}a:hover{color:#000000}
+button{font:inherit;cursor:pointer}
+input::placeholder{color:#6F7A85}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.ic{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.nv{position:relative;width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;color:#5B6570;text-decoration:none}
+.nv:hover{background:#FFFFFF;color:#141414}
+.nv[aria-current="page"]{background:#FFFFFF;color:#141414;box-shadow:0 1px 3px rgba(16,24,40,0.07)}
+.nv .ic{stroke-width:1.5}
+.nv .m{fill:#FFFFFF}
+.nv[aria-current="page"] .f{fill:currentColor}
+.nv[aria-current="page"] .w{stroke:#FFFFFF}
+.bdg{position:absolute;top:0;right:0;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:999px;border:2px solid #F4F6F9;background:#B45309;color:#FFFFFF;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.cta:hover{background:#1D4ED8 !important;color:#FFFFFF !important}
+.it{display:flex;align-items:center;gap:9px;padding:0 6px;border-radius:10px;text-decoration:none;font-size:15px;color:#434C55}
+.it:hover{background:#F3F6F9;color:#141414}
+.card{min-height:170px;box-sizing:border-box;display:flex;flex-direction:column;padding:16px;border-radius:16px;border:1px solid #E8EDF2;background:#FFFFFF;text-decoration:none;color:#262B30}
+.card:hover{border-color:#BFD0E3;color:#262B30}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #F4F6F9; font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #141414; -webkit-font-smoothing: antialiased">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; box-sizing: border-box; min-height: 84px; padding: 14px 32px 22px">
+<a href="dashboard.html" aria-label="J.A.V.I home" style="flex: 0 1 407px; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #141414">
+<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><g fill="#141414"><path d="M14.8 14.8V9A5.8 5.8 0 1 0 9 14.8Z"/><path d="M17.2 14.8V9A5.8 5.8 0 1 1 23 14.8Z"/><path d="M14.8 17.2V23A5.8 5.8 0 1 1 9 17.2Z"/><path d="M17.2 17.2V23A5.8 5.8 0 1 0 23 17.2Z"/></g></svg>
+<span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em">J.A.V.I</span>
+</a>
+<nav aria-label="Primary" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<a href="dashboard.html" class="nv" aria-label="Dashboard" title="Dashboard"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M7.09 4.76 6.09 5.54C4.57 6.73 3.81 7.32 3.41 8.15 3 8.99 3 9.95 3 11.88v2.09c0 3.79 0 5.68 1.17 6.85C5.34 22 7.23 22 11 22h2c3.77 0 5.66 0 6.83-1.18C21 19.65 21 17.76 21 13.97v-2.09c0-1.93 0-2.89-.41-3.73-.4-.83-1.16-1.42-2.68-2.61l-1-.78C14.55 2.92 13.37 2 12 2s-2.55.92-4.91 2.76Z"/><path class="w" d="M15 22v-3.5c0-1.66-1.34-3-3-3s-3 1.34-3 3V22"/></svg></a>
+<a href="needs-you.html" class="nv" aria-label="Needs you, 3 waiting" title="Needs you"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M5.67 9.91 8.73 5.77c1.98-2.68 2.97-4.02 3.89-3.73.92.28.92 1.92.92 5.21v.31c0 1.19 0 1.78.38 2.15l.02.02c.39.36 1 .36 2.24.36 2.22 0 3.33 0 3.7.67l.02.03c.35.68-.29 1.55-1.57 3.29l-3.06 4.14c-1.98 2.68-2.97 4.02-3.89 3.73-.92-.28-.92-1.92-.92-5.21v-.31c0-1.19 0-1.78-.38-2.15l-.02-.02c-.39-.36-1-.36-2.24-.36-2.22 0-3.33 0-3.7-.67l-.02-.03c-.35-.68.29-1.55 1.57-3.29Z"/></svg><span class="bdg" aria-hidden="true">3</span></a>
+<a href="job-feed.html" class="nv" aria-label="Job feed" title="Job feed"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M13.9 13.5h1.18c1.28 0 1.93 0 2.47-.12 1.58-.33 2.87-1.36 3.44-2.74.2-.47.27-1.05.43-2.2.06-.43.09-.65.06-.82-.08-.52-.5-.94-1.05-1.07-.19-.05-.43-.05-.91-.05H4.48c-.48 0-.72 0-.91.05-.56.13-.97.55-1.05 1.07-.03.17 0 .39.06.82.16 1.15.24 1.73.43 2.2.57 1.38 1.86 2.41 3.44 2.74.55.12 1.19.12 2.47.12h1.18"/><path class="f" d="M3.5 11.5v2c0 3.77 0 5.66 1.11 6.83C5.71 21.5 7.49 21.5 11.06 21.5h1.88c3.57 0 5.35 0 6.45-1.17 1.11-1.17 1.11-3.06 1.11-6.83v-2"/><path d="M15.5 6.5l-.08-.26c-.38-1.32-.58-1.98-1.04-2.36-.45-.38-1.06-.38-2.28-.38h-.2c-1.22 0-1.83 0-2.29.38-.46.38-.65 1.04-1.04 2.36L8.5 6.5"/><path class="w" d="M10 13.33c0-.31 0-.46.03-.59.1-.35.36-.61.71-.71.13-.03.28-.03.59-.03h1.34c.31 0 .46 0 .59.03.35.1.61.36.71.71.03.13.03.28.03.59V14a2 2 0 1 1-4 0v-.67Z"/></svg></a>
+<a href="drafts.html" class="nv" aria-label="Drafts" title="Drafts"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M13.6 2.75H11C7.01 2.75 5.02 2.75 3.76 3.99 2.5 5.23 2.5 7.22 2.5 11.21v1.58c0 3.99 0 5.98 1.26 7.22C5.02 21.25 7.01 21.25 11 21.25h2c3.99 0 5.98 0 7.24-1.24 1.26-1.24 1.26-3.23 1.26-7.22v-2.14c0-.68 0-1.02-.13-1.32-.12-.31-.36-.55-.84-1.03L15.95 3.72c-.48-.48-.72-.72-1.03-.84-.3-.13-.64-.13-1.32-.13Z"/><path class="w" d="M14.5 3v1.5c0 2.36 0 3.54.73 4.27.73.73 1.91.73 4.27.73h1.7"/></svg></a>
+<a href="tracker.html" class="nv" aria-label="Tracker" title="Tracker"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M2.5 12c0-4.48 0-6.72 1.39-8.11C5.28 2.5 7.52 2.5 12 2.5s6.72 0 8.11 1.39C21.5 5.28 21.5 7.52 21.5 12s0 6.72-1.39 8.11C18.72 21.5 16.48 21.5 12 21.5s-6.72 0-8.11-1.39C2.5 18.72 2.5 16.48 2.5 12Z"/><path class="w" d="M8 7v9M12 7v5M16 7v7"/></svg></a>
+<a href="cv-profile.html" class="nv" aria-label="CV and profile" title="CV &amp; profile"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M6.58 15.48c-1.42.84-5.13 2.56-2.87 4.72C4.82 21.25 6.05 22 7.59 22h8.82c1.55 0 2.78-.75 3.88-1.8 2.26-2.16-1.45-3.88-2.87-4.72a10.66 10.66 0 0 0-10.84 0Z"/><path class="f" d="M16.5 6.5a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"/></svg></a>
+<a href="business-mode.html" class="nv" aria-label="Business mode" title="Business mode"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.99v4.5c0 2.84 0 4.25.88 5.13.88.88 2.29.88 5.12.88h6c2.83 0 4.24 0 5.12-.88.88-.88.88-2.29.88-5.13v-4.5"/><path d="M15 16.98c-.68.6-1.77 1-3 1s-2.32-.4-3-1"/><path class="f" d="M17.8 2.02 6.15 2.05c-1.74-.09-2.18 1.25-2.18 1.9 0 .59-.08 1.44-1.14 3.04-1.07 1.6-.99 2.08-.39 3.19.5.92 1.77 1.28 2.43 1.34 2.1.05 3.12-1.77 3.12-3.04 1.04 3.2 4.01 3.2 5.33 2.84 1.32-.37 2.46-1.68 2.72-2.84.16 1.44.63 2.28 2.03 2.85 1.45.6 2.69-.32 3.32-.9.63-.59 1.03-1.88-.09-3.31-.77-.98-1.09-1.91-1.19-2.87-.06-.56-.11-1.15-.51-1.53-.57-.56-1.39-.7-1.8-.69Z"/></svg></a>
+<a href="ask-javi.html" class="nv" aria-label="Ask J.A.V.I" title="Ask J.A.V.I" aria-current="page"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.45 14.80 L15.37 15.20 L15.15 15.58 L14.84 15.92 L14.51 16.22 L14.23 16.51 L14.05 16.81 L13.97 17.15 L13.96 17.55 L13.98 17.99 L13.96 18.45 L13.85 18.88 L13.62 19.22 L13.28 19.45 L12.85 19.56 L12.39 19.58 L11.95 19.56 L11.55 19.57 L11.21 19.65 L10.91 19.83 L10.62 20.11 L10.32 20.44 L9.98 20.75 L9.60 20.97 L9.20 21.05 L8.80 20.97 L8.42 20.75 L8.08 20.44 L7.78 20.11 L7.49 19.83 L7.19 19.65 L6.85 19.57 L6.45 19.56 L6.01 19.58 L5.55 19.56 L5.12 19.45 L4.78 19.22 L4.55 18.88 L4.44 18.45 L4.42 17.99 L4.44 17.55 L4.43 17.15 L4.35 16.81 L4.17 16.51 L3.89 16.22 L3.56 15.92 L3.25 15.58 L3.03 15.20 L2.95 14.80 L3.03 14.40 L3.25 14.02 L3.56 13.68 L3.89 13.38 L4.17 13.09 L4.35 12.79 L4.43 12.45 L4.44 12.05 L4.42 11.61 L4.44 11.15 L4.55 10.72 L4.78 10.38 L5.12 10.15 L5.55 10.04 L6.01 10.02 L6.45 10.04 L6.85 10.03 L7.19 9.95 L7.49 9.77 L7.78 9.49 L8.08 9.16 L8.42 8.85 L8.80 8.63 L9.20 8.55 L9.60 8.63 L9.98 8.85 L10.32 9.16 L10.62 9.49 L10.91 9.77 L11.21 9.95 L11.55 10.03 L11.95 10.04 L12.39 10.02 L12.85 10.04 L13.28 10.15 L13.62 10.38 L13.85 10.72 L13.96 11.15 L13.98 11.61 L13.96 12.05 L13.97 12.45 L14.05 12.79 L14.23 13.09 L14.51 13.38 L14.84 13.68 L15.15 14.02 L15.37 14.40Z"/><path class="f m" d="M21.05 9.20 L20.97 9.60 L20.75 9.98 L20.44 10.32 L20.11 10.62 L19.83 10.91 L19.65 11.21 L19.57 11.55 L19.56 11.95 L19.58 12.39 L19.56 12.85 L19.45 13.28 L19.22 13.62 L18.88 13.85 L18.45 13.96 L17.99 13.98 L17.55 13.96 L17.15 13.97 L16.81 14.05 L16.51 14.23 L16.22 14.51 L15.92 14.84 L15.58 15.15 L15.20 15.37 L14.80 15.45 L14.40 15.37 L14.02 15.15 L13.68 14.84 L13.38 14.51 L13.09 14.23 L12.79 14.05 L12.45 13.97 L12.05 13.96 L11.61 13.98 L11.15 13.96 L10.72 13.85 L10.38 13.62 L10.15 13.28 L10.04 12.85 L10.02 12.39 L10.04 11.95 L10.03 11.55 L9.95 11.21 L9.77 10.91 L9.49 10.62 L9.16 10.32 L8.85 9.98 L8.63 9.60 L8.55 9.20 L8.63 8.80 L8.85 8.42 L9.16 8.08 L9.49 7.78 L9.77 7.49 L9.95 7.19 L10.03 6.85 L10.04 6.45 L10.02 6.01 L10.04 5.55 L10.15 5.12 L10.38 4.78 L10.72 4.55 L11.15 4.44 L11.61 4.42 L12.05 4.44 L12.45 4.43 L12.79 4.35 L13.09 4.17 L13.38 3.89 L13.68 3.56 L14.02 3.25 L14.40 3.03 L14.80 2.95 L15.20 3.03 L15.58 3.25 L15.92 3.56 L16.22 3.89 L16.51 4.17 L16.81 4.35 L17.15 4.43 L17.55 4.44 L17.99 4.42 L18.45 4.44 L18.88 4.55 L19.22 4.78 L19.45 5.12 L19.56 5.55 L19.58 6.01 L19.56 6.45 L19.57 6.85 L19.65 7.19 L19.83 7.49 L20.11 7.78 L20.44 8.08 L20.75 8.42 L20.97 8.80Z"/><path class="w" d="M12.9 9.7c.63-.85 1.27-.85 1.9 0s1.27.85 1.9 0"/></svg></a>
+</nav>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+<p style="margin: 0 14px 0 0; display: flex; align-items: center; gap: 6px"><span style="font-size: 34px; line-height: 1; letter-spacing: -0.03em; color: #111418">21</span><span style="display: flex; flex-direction: column; font-size: 11px; line-height: 13px; color: #2E3338"><span>Sat,</span><span>November</span></span></p>
+<a href="job-feed.html" class="cta" style="height: 40px; display: inline-flex; align-items: center; gap: 10px; padding: 0 18px 0 20px; border-radius: 999px; background: #2563EB; color: #FFFFFF; font-size: 14px; font-weight: 500; text-decoration: none">Add jobs<svg class="ic" width="16" height="16" viewBox="0 0 24 24" style="stroke-width: 2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>
+<button type="button" aria-label="Notifications" style="width: 44px; height: 44px; border: 0; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: #141414; padding: 0; margin-right: 6px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 18a3.5 3.5 0 0 1-7 0"/><path d="M19.23 18H4.77C3.79 18 3 17.21 3 16.23c0-.47.19-.92.52-1.25l.6-.6c.56-.56.88-1.33.88-2.12V9.5a7 7 0 0 1 14 0v2.76c0 .79.32 1.56.88 2.12l.6.6c.33.33.52.78.52 1.25 0 .98-.79 1.77-1.77 1.77Z"/></svg></button>
+<span role="img" aria-label="Desmond Ubi" style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; display: block; background: #C9D6E0"><svg width="42" height="42" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="17" r="7" fill="#6B4A3A"/><path d="M12.8 16c0-5.2 3.3-8.4 7.4-8.4 4.2 0 7.1 2.8 7.1 7.6-1.7-1.8-4.6-2.6-7.6-2.6-2.6 0-5 .9-6.9 3.4Z" fill="#1E1412"/><path d="M6 40c1-8 6.8-12.5 14-12.5S33 32 34 40Z" fill="#2A3138"/></svg></span>
+</div>
+</header>
+
+<div style="flex: 1; box-sizing: border-box; padding: 16px 32px 24px; background: radial-gradient(1000px 680px at 0% 100%, rgba(37, 99, 235, 0.14) 0%, rgba(20, 184, 166, 0.09) 45%, rgba(20, 184, 166, 0) 72%), #F4F6F9">
+
+<section aria-label="Ask J.A.V.I" style="box-sizing: border-box; padding: 24px 24px 16px; border-radius: 22px; border: 1px solid #E8EDF2; background: rgba(255, 255, 255, 0.72)">
+
+<div style="display: flex; align-items: center; gap: 12px; height: 44px">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 50%; background: #2563EB; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M14.6 4.2l1.3 3.2 3.2 1.3-3.2 1.3-1.3 3.2-1.3-3.2-3.2-1.3 3.2-1.3Z" fill="#FFFFFF"/><path d="M8.4 11.6l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9Z" fill="#FFFFFF"/></svg></span>
+<h1 style="margin: 0 auto 0 0; font-size: 14px; line-height: 18px; font-weight: 500; color: #141414">Ask J.A.V.I</h1>
+<button type="button" aria-label="More options" style="width: 44px; height: 44px; border: 0; border-radius: 50%; background: #F3F6F9; display: flex; align-items: center; justify-content: center; color: #141414; padding: 0"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg></button>
+<a href="dashboard.html" aria-label="Collapse Ask J.A.V.I" style="width: 44px; height: 44px; border-radius: 50%; background: #F3F6F9; display: flex; align-items: center; justify-content: center; color: #141414"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" style="stroke-width: 1.8" aria-hidden="true"><path d="M14 10l7-7M14 10V5M14 10h5M10 14l-7 7M10 14v5M10 14H5"/></svg></a>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px">
+
+<nav aria-label="Chats" style="flex: 0 1 308px; min-width: 0; min-height: 722px; box-sizing: border-box; display: flex; flex-direction: column; padding: 16px; border-radius: 18px; border: 1px solid #E8EDF2; background: #FFFFFF">
+<button type="button" class="it" style="height: 36px; border: 0; background: transparent; color: #262B30; text-align: left"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" style="stroke-width: 2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+<p style="margin: 34px 0 0; padding: 0 6px; font-size: 11px; line-height: 14px; color: #5F6A74">Previous chats</p>
+<ul style="list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li><a href="#" class="it" style="height: 40px"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" style="flex: none" aria-hidden="true"><path d="M22 11.57c0 5.28-4.48 9.57-10 9.57-.65 0-1.3-.06-1.93-.18-.46-.08-.68-.13-.84-.1-.16.02-.38.14-.83.38a6.4 6.4 0 0 1-4.16.65 5.2 5.2 0 0 0 1.1-2.35c.13-.6-.15-1.19-.58-1.6C2.86 16.13 2 13.94 2 11.57 2 6.28 6.48 2 12 2s10 4.28 10 9.57Z"/></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Why was Kora Pay paused?</span></a></li>
+<li><a href="#" class="it" style="height: 40px"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" style="flex: none" aria-hidden="true"><path d="M22 11.57c0 5.28-4.48 9.57-10 9.57-.65 0-1.3-.06-1.93-.18-.46-.08-.68-.13-.84-.1-.16.02-.38.14-.83.38a6.4 6.4 0 0 1-4.16.65 5.2 5.2 0 0 0 1.1-2.35c.13-.6-.15-1.19-.58-1.6C2.86 16.13 2 13.94 2 11.57 2 6.28 6.48 2 12 2s10 4.28 10 9.57Z"/></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Make my CV lead with backend for security roles</span></a></li>
+<li><a href="#" class="it" style="height: 40px"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" style="flex: none" aria-hidden="true"><path d="M22 11.57c0 5.28-4.48 9.57-10 9.57-.65 0-1.3-.06-1.93-.18-.46-.08-.68-.13-.84-.1-.16.02-.38.14-.83.38a6.4 6.4 0 0 1-4.16.65 5.2 5.2 0 0 0 1.1-2.35c.13-.6-.15-1.19-.58-1.6C2.86 16.13 2 13.94 2 11.57 2 6.28 6.48 2 12 2s10 4.28 10 9.57Z"/></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Find restaurants in Wuse 2 without a website</span></a></li>
+<li><a href="#" class="it" style="height: 40px"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" style="flex: none" aria-hidden="true"><path d="M22 11.57c0 5.28-4.48 9.57-10 9.57-.65 0-1.3-.06-1.93-.18-.46-.08-.68-.13-.84-.1-.16.02-.38.14-.83.38a6.4 6.4 0 0 1-4.16.65 5.2 5.2 0 0 0 1.1-2.35c.13-.6-.15-1.19-.58-1.6C2.86 16.13 2 13.94 2 11.57 2 6.28 6.48 2 12 2s10 4.28 10 9.57Z"/></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Prep me for the Orbit Logistics interview</span></a></li>
+</ul>
+<div style="margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 4px">
+<a href="#" class="it" style="height: 36px; color: #333A41"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><path d="M4 15.5A2.5 2.5 0 0 1 6.5 13H7a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-.5A2.5 2.5 0 0 1 4 16.5v-1ZM20 15.5a2.5 2.5 0 0 0-2.5-2.5H17a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h.5a2.5 2.5 0 0 0 2.5-2.5v-1Z"/><path d="M18 19v.5a2 2 0 0 1-2 2h-2.5"/></svg>Help</a>
+<a href="cv-profile.html" class="it" style="height: 36px; color: #333A41"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 12a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z"/><path d="M21.01 13.38c.52-.14.79-.21.89-.35.1-.14.1-.37.1-.82v-.42c0-.45 0-.68-.1-.82-.1-.14-.37-.21-.89-.35-1.95-.53-3.17-2.57-2.67-4.51.14-.53.21-.8.14-.96-.07-.16-.26-.27-.64-.48l-.35-.2c-.38-.21-.57-.32-.74-.3-.17.03-.37.22-.76.6-1.46 1.43-3.86 1.43-5.32 0-.39-.38-.59-.57-.76-.6-.17-.02-.36.09-.74.3l-.35.2c-.38.21-.57.32-.64.48-.07.16 0 .43.14.96.5 1.94-.72 3.98-2.67 4.51-.52.14-.79.21-.89.35-.1.14-.1.37-.1.82v.42c0 .45 0 .68.1.82.1.14.37.21.89.35 1.95.53 3.17 2.57 2.67 4.51-.14.53-.21.8-.14.96.07.16.26.27.64.48l.35.2c.38.21.57.32.74.3.17-.03.37-.22.76-.6 1.46-1.44 3.87-1.44 5.33 0 .39.38.59.57.76.6.17.02.36-.09.74-.3l.35-.2c.38-.21.57-.32.64-.48.07-.16 0-.43-.14-.96-.5-1.94.72-3.98 2.67-4.51Z"/></svg>Settings</a>
+</div>
+<aside aria-label="Upgrade" style="margin-top: 16px; min-height: 170px; box-sizing: border-box; display: flex; flex-direction: column; padding: 20px; border-radius: 14px; background: #EEF4FF">
+<span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M14.6 4.2l1.3 3.2 3.2 1.3-3.2 1.3-1.3 3.2-1.3-3.2-3.2-1.3 3.2-1.3Z" fill="#2563EB"/><path d="M8.4 11.6l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9Z" fill="#2563EB"/></svg></span>
+<p style="margin: 18px 0 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.01em; color: #12324A">Go Pro with J.A.V.I</p>
+<p style="margin: 6px 0 0; font-size: 13px; line-height: 18px; color: #3F5869">Higher daily send cap, more watched pages and unlimited business leads.</p>
+</aside>
+</nav>
+
+<div style="flex: 999 1 480px; min-width: 0; min-height: 722px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; padding-bottom: 22px">
+<div aria-hidden="true" style="flex: 2 1 24px"></div>
+<h2 style="margin: 0; text-align: center; font-size: 35px; line-height: 49px; font-weight: 300; letter-spacing: -0.015em; color: #333A41">Ready To Land Top<br><strong style="font-weight: 500; color: #1D2226">Jobs</strong> Or Revisit Your Pipeline?</h2>
+<p style="margin: 12px 0 0; text-align: center; font-size: 14px; line-height: 20px; color: #5F6A74">Ask about any application, or tell J.A.V.I what to do next.</p>
+<div style="width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 248px)); justify-content: center; gap: 14px; margin-top: 30px">
+<a href="job-feed.html" class="card">
+<span style="font-size: 16px; line-height: 20px; font-weight: 500">Add jobs</span>
+<span style="margin-top: 8px; font-size: 13px; line-height: 19px; color: #5F6A74">Paste links or drop a file (PDF, spreadsheet, screenshot) and I’ll pull out every role.</span>
+<span aria-hidden="true" style="margin-top: auto; align-self: flex-end; width: 40px; height: 40px; border-radius: 50%; background: #EFF6FF; display: flex; align-items: center; justify-content: center; color: #1D4ED8"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" style="stroke-width: 1.8"><path d="M9.52 14.48l4.96-4.96"/><path d="M16.96 14.48l2.64-2.64a4.68 4.68 0 0 0-6.62-6.62l-2.64 2.64M14.48 16.96l-2.64 2.64a4.68 4.68 0 0 1-6.62-6.62l2.64-2.64"/></svg></span>
+</a>
+<a href="drafts.html" class="card">
+<span style="font-size: 16px; line-height: 20px; font-weight: 500">Review drafts</span>
+<span style="margin-top: 8px; font-size: 13px; line-height: 19px; color: #5F6A74">4 tailored applications are waiting. I’ll walk you through what changed in each.</span>
+<span aria-hidden="true" style="margin-top: auto; align-self: flex-end; width: 40px; height: 40px; border-radius: 50%; background: #EFF6FF; display: flex; align-items: center; justify-content: center; color: #1D4ED8"><svg class="ic" width="17" height="17" viewBox="0 0 24 24"><path d="M3.5 10c0-3.77 0-5.66 1.17-6.83C5.84 2 7.73 2 11.5 2h1c3.77 0 5.66 0 6.83 1.17C20.5 4.34 20.5 6.23 20.5 10v4c0 3.77 0 5.66-1.17 6.83C18.16 22 16.27 22 12.5 22h-1c-3.77 0-5.66 0-6.83-1.17C3.5 19.66 3.5 17.77 3.5 14v-4Z"/><path d="M8 7h8M8 12h8M8 17h4"/></svg></span>
+</a>
+<a href="business-mode.html" class="card">
+<span style="font-size: 16px; line-height: 20px; font-weight: 500">Find business leads</span>
+<span style="margin-top: 8px; font-size: 13px; line-height: 19px; color: #5F6A74">Name an area and a type of business. I’ll find ones with a problem you can fix.</span>
+<span aria-hidden="true" style="margin-top: auto; align-self: flex-end; width: 40px; height: 40px; border-radius: 50%; background: #F0FDFA; display: flex; align-items: center; justify-content: center; color: #0F766E"><svg class="ic" width="17" height="17" viewBox="0 0 24 24"><path d="M13.62 21.49a2.34 2.34 0 0 1-1.62.65 2.34 2.34 0 0 1-1.62-.65C6.41 17.65 1.1 13.37 3.69 7.14 5.09 3.77 8.45 1.86 12 1.86s6.91 1.91 8.31 5.28c2.59 6.22-2.71 10.53-6.69 14.35Z"/><path d="M15.5 11a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z"/></svg></span>
+</a>
+</div>
+<div aria-hidden="true" style="flex: 1 1 24px"></div>
+<div style="width: 100%; max-width: 867px; display: flex; align-items: center; gap: 12px">
+<div style="flex: 1; min-width: 0; height: 54px; display: flex; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 20px 0 8px; border-radius: 999px; border: 1px solid #E3E9EE; background: #FFFFFF">
+<button type="button" aria-label="Attach files" style="width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: transparent; display: flex; align-items: center; justify-content: center; color: #141414; padding: 0"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" style="stroke-width: 2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+<label style="flex: 1; min-width: 0; display: flex"><span class="sr">Message J.A.V.I</span><input type="text" placeholder="Paste a job link or ask anything..." style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; font-size: 15px; color: #141414; padding: 0"></label>
+</div>
+<button type="button" aria-label="Voice input" style="width: 48px; height: 48px; flex: none; border: 1px solid #E3E9EE; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: #0D9488; padding: 0"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" style="stroke-width: 1.8" aria-hidden="true"><path d="M17 7v4a5 5 0 0 1-10 0V7a5 5 0 0 1 10 0Z"/><path d="M20 11a8 8 0 0 1-16 0M12 19v3m0 0h3m-3 0H9"/></svg></button>
+</div>
+</div>
+
+</div>
+</section>
+</div>
+</div>
+
+</body>
+</html>
