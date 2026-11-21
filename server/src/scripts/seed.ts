@@ -5,7 +5,6 @@
  */
 
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { connectDb, disconnectDb } from '../lib/db';
 import { User } from '../models/user.model';
@@ -20,9 +19,6 @@ async function seed() {
   console.log('🌱 Starting J.A.V.I database seed...');
   await connectDb();
 
-  // Common password hash for test accounts
-  const passwordHash = await bcrypt.hash('password123', 10);
-
   // ---------------------------------------------------------------------------
   // 1. Primary Seed User: you@example.com (Full Active Workspace)
   // ---------------------------------------------------------------------------
@@ -30,13 +26,11 @@ async function seed() {
   if (!primaryUser) {
     primaryUser = await User.create({
       email: 'you@example.com',
-      passwordHash,
       name: 'Ada Okafor',
       consent: { termsAcceptedAt: new Date() },
     });
     console.log('✅ Created primary user: you@example.com');
   } else {
-    primaryUser.passwordHash = passwordHash;
     primaryUser.name = 'Ada Okafor';
     await primaryUser.save();
     console.log('ℹ️ Updated primary user: you@example.com');
@@ -167,13 +161,11 @@ async function seed() {
   if (!newUser) {
     newUser = await User.create({
       email: 'newuser@example.com',
-      passwordHash,
       name: 'Alex Rivera',
       consent: { termsAcceptedAt: new Date() },
     });
     console.log('✅ Created zero-state user: newuser@example.com');
   } else {
-    newUser.passwordHash = passwordHash;
     await newUser.save();
     console.log('ℹ️ Updated zero-state user: newuser@example.com');
   }
