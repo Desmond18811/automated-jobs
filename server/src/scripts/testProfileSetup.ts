@@ -2,7 +2,7 @@ process.env.NODE_ENV = 'test';
 import type { AddressInfo } from 'node:net';
 import { activateMemoryDb } from '../lib/memoryDb';
 import { createApp } from '../app';
-import { register, verifyOtp } from '../services/auth.service';
+import { createTestSession } from './authTestHelper';
 
 /**
  * Exercises the profile-setup contract end to end over real HTTP (in-memory DB):
@@ -22,8 +22,7 @@ async function main() {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
 
   const email = `setup_${Date.now()}@example.com`;
-  const reg = await register(email, 'Password123!', 'Setup Tester');
-  const { accessToken } = await verifyOtp(email, reg.otpCode!);
+  const { accessToken } = await createTestSession(email, 'Setup Tester');
   const call = async (method: string, path: string, body?: unknown, raw?: FormData) => {
     const res = await fetch(base + path, {
       method,
