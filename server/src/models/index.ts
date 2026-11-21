@@ -1,5 +1,6 @@
 export * from './user.model';
 export * from './refreshToken.model';
+export * from './loginChallenge.model';
 export * from './profile.model';
 export * from './jobPost.model';
 export * from './application.model';
