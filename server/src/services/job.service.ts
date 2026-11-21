@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isDupKey } from '../lib/http';
-import { fetchText } from '../lib/net';
+import { assertPublicUrl, fetchText } from '../lib/net';
+import { getBrowser } from '../lib/browser';
 import { clip, dedupeHashOf, fingerprintOf, safeHost } from '../lib/normalize';
 import { decodeEntities, htmlToText } from '../lib/text';
 import type { RawJob } from '../sources/types';
@@ -93,8 +94,8 @@ const Extracted = z.object({ title: optStr, company: optStr, location: optStr, a
  * Every value the model returns must literally appear on the page, or it is dropped.
  * Login-walled pages (LinkedIn) will usually fail here; the user then types the fields.
  */
-export async function extractJobFromUrl(url: string): Promise<Partial<RawJob>> {
-  const html = await fetchText(url);
+export async function extractJobFromUrl(url: string, renderedHtml?: string): Promise<Partial<RawJob>> {
+  const html = renderedHtml ?? (await fetchText(url));
   const meta = (prop: string) =>
     html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']+)`, 'i'))?.[1];
   const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
@@ -124,4 +125,51 @@ export async function extractJobFromUrl(url: string): Promise<Partial<RawJob>> {
   } catch {
     return base;
   }
+}
+
+/** Many job pages (Workday, Ashby, Lever SPAs) render the posting with JavaScript; a plain fetch gets a shell. */
+async function renderHtml(url: string): Promise<string> {
+  await assertPublicUrl(url);
+  const browser = await getBrowser();
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+    return await page.content();
+  } finally {
+    await context.close();
+  }
+}
+
+/**
+ * A pasted link → a saved job with the full posting text, ready for matching and CV tailoring.
+ * Falls back to rendering in a browser when the fetched page has too little text to tailor against.
+ */
+export async function jobFromLink(url: string): Promise<{ job: JobPostDoc; isNew: boolean; rendered: boolean }> {
+  let found = await extractJobFromUrl(url).catch(() => ({}) as Partial<RawJob>);
+  let rendered = false;
+  if (!found.title || (found.description ?? '').length < 600) {
+    const html = await renderHtml(url).catch(() => null);
+    if (html) {
+      const again = await extractJobFromUrl(url, html).catch(() => null);
+      if (again && (again.description ?? '').length > (found.description ?? '').length) {
+        found = { ...found, ...Object.fromEntries(Object.entries(again).filter(([, v]) => v)) };
+        rendered = true;
+      }
+    }
+  }
+  const result = await upsertJob({
+    source: 'link',
+    url,
+    title: found.title || 'Position from link',
+    company: found.company || safeHost(url) || 'Company',
+    location: found.location,
+    description: found.description ?? '',
+    applyEmail: found.applyEmail,
+    applyUrl: url,
+    postedAt: new Date(),
+  });
+  if (!result) throw new Error('Could not save this job');
+  return { ...result, rendered };
 }

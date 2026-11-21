@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+input, button, select, textarea {
+  font-family: inherit;
+}
+
 html,
 body {
   margin: 0;
@@ -23,6 +27,22 @@ body {
   height: 100%;
   position: relative;
   overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .jj-stage-frame {
+    display: none !important;
+  }
 }
 
 a {
@@ -51,4 +71,215 @@ input, select, textarea, button {
 @keyframes jj-fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Javi Motion & Animation System
+   ========================================================================== */
+
+/* Continuous Sliding Carousel (Marquee) */
+@keyframes jj-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.jj-marquee-container {
+  overflow: hidden;
+  position: relative;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, transparent 100%);
+}
+
+.jj-marquee-track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 36px;
+  animation: jj-marquee 28s linear infinite;
+  will-change: transform;
+}
+
+.jj-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.jj-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #71717a;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+}
+
+.jj-marquee-item:hover {
+  color: #0b0b0c;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(20, 20, 40, 0.06);
+  transform: translateY(-2px);
+}
+
+/* Hero Entrance Animations */
+@keyframes jj-hero-fade-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes jj-hero-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulsing Badge Indicator */
+@keyframes jj-pulse-dot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(47, 194, 107, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(47, 194, 107, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(47, 194, 107, 0);
+  }
+}
+
+/* Radial Glow Ambient Pulse */
+@keyframes jj-glow-pulse {
+  0%, 100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* Floating Chips Keyframes */
+@keyframes jj-chip-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.35) translateY(18px);
+  }
+  70% {
+    transform: scale(1.08) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes jj-float-0 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1.5deg);
+  }
+}
+
+@keyframes jj-float-1 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
+}
+
+@keyframes jj-float-2 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(1.8deg);
+  }
+}
+
+.jj-hero-chip {
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.28s ease;
+  cursor: pointer;
+  pointer-events: auto !important;
+}
+
+.jj-hero-chip:hover {
+  transform: scale(1.18) translateY(-4px) !important;
+  box-shadow: 0 14px 28px rgba(30, 40, 90, 0.16), 0 0 0 1px #dcdcff !important;
+}
+
+/* Slow Card Entrance for Navigation Pages (How, Boards, Tailor, Pricing, FAQ) */
+@keyframes jj-card-slow-in {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.jj-animated-card {
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease;
+}
+
+.jj-animated-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 36px rgba(40, 60, 140, 0.09) !important;
+  border-color: #cfd5fe !important;
+}
+
+/* Interactive Button Hover Animations */
+.jj-btn-primary {
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, filter 0.2s ease;
+}
+.jj-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22) !important;
+}
+
+.jj-btn-secondary {
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+.jj-btn-secondary:hover {
+  transform: translateY(-2px);
+  border-color: #c9cffd !important;
+  background-color: #fafafc !important;
+  box-shadow: 0 6px 16px rgba(40, 60, 140, 0.06) !important;
+}
+
+/* Page entrance container */
+@keyframes jj-page-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.jj-page-fade {
+  animation: jj-page-in 0.35s ease-out;
 }

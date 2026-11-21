@@ -5,10 +5,12 @@ import { normalizeText, questionKey } from '../lib/normalize';
 import { storagePath } from '../lib/storage';
 import type { NeedsReason, TaskQuestion } from '../models/task.model';
 import type { AdapterResult, ApplyContext, ChannelAdapter } from './types';
+import { formDryRun } from '../services/safety.service';
 
 /**
  * Fills career-page forms (Greenhouse, Lever, Ashby, Workable and plain HTML forms).
- * Rules: never solve or bypass a CAPTCHA, never log in, never guess an answer.
+ * Rules: never solve or bypass a CAPTCHA, never guess an answer. This headless adapter never logs in;
+ * the live browser (adapters/live) may sign in or create accounts, with per-site encrypted passwords.
  * Anything unknown becomes a "needs you" task; the saved answer is reused next time.
  */
 
@@ -18,9 +20,9 @@ export interface FieldInfo {
 }
 export interface Fill { idx: number; kind: 'text' | 'select' | 'file' | 'check'; value: string }
 
-const CAPTCHA = 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], .g-recaptcha, .h-captcha, .cf-turnstile';
-const SALARY_RE = /salary|compensation|remuneration|pay expectation|expected pay|desired pay|\bctc\b|rate expectation/i;
-const SUCCESS_RE = /thank you|thanks for applying|application (has been )?(received|submitted)|we('ve| have) received your application/i;
+export const CAPTCHA = 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], .g-recaptcha, .h-captcha, .cf-turnstile';
+export const SALARY_RE = /salary|compensation|remuneration|pay expectation|expected pay|desired pay|\bctc\b|rate expectation/i;
+export const SUCCESS_RE = /thank you|thanks for applying|application (has been )?(received|submitted)|we('ve| have) received your application/i;
 
 export async function collectFields(page: Page): Promise<FieldInfo[]> {
   return page.$$eval('input, textarea, select', (els) => {
@@ -52,11 +54,85 @@ export async function collectFields(page: Page): Promise<FieldInfo[]> {
   });
 }
 
+/** Profile enum values in the words application forms actually use. Order = preference. */
+const ENUM_WORDS: Record<string, string[]> = {
+  high_school: ['high school', 'secondary', 'ged'],
+  associate: ['associate'],
+  bachelor: ["bachelor's", 'bachelor', 'bsc', 'ba ', 'b.s', 'undergraduate'],
+  master: ["master's", 'master', 'msc', 'mba', 'm.s'],
+  doctorate: ['doctorate', 'phd', 'doctoral'],
+  bootcamp: ['bootcamp', 'certificate', 'vocational'],
+  self_taught: ['self-taught', 'self taught', 'other'],
+  male: ['male', 'man'],
+  female: ['female', 'woman'],
+  non_binary: ['non-binary', 'nonbinary', 'non binary'],
+  other: ['other', 'self-describe'],
+  hispanic_latino: ['hispanic', 'latino', 'latina', 'latinx'],
+  white: ['white'],
+  black_african_american: ['black', 'african american'],
+  asian: ['asian'],
+  native_american: ['native american', 'american indian', 'alaska native'],
+  two_or_more: ['two or more', 'multiracial', 'mixed'],
+  veteran: ['i am a veteran', 'protected veteran', 'identify as one or more', 'yes'],
+  not_veteran: ['not a protected veteran', 'i am not a veteran', 'not a veteran', 'no'],
+  yes: ['yes', 'i have a disability', 'have a disability'],
+  no: ['no', "i don't have a disability", 'do not have a disability', 'no, i do not'],
+  decline: ['decline', "don't wish", 'do not wish', 'prefer not', 'not to answer', 'choose not', 'not to disclose'],
+  none: ['none', 'no clearance', 'no'],
+  confidential: ['confidential'],
+  secret: ['secret'],
+  top_secret: ['top secret', 'ts/sci'],
+};
+
+/** Human-readable text for free-text inputs (enum value → first form word). */
+function humanize(value: string): string {
+  const words = ENUM_WORDS[value];
+  if (!words) return value;
+  if (value === 'decline') return 'Prefer not to say';
+  const w = words[0].trim();
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
+
+/**
+ * Pick the select/radio option that means `value`. Tries an exact match, then the enum's form
+ * words, then plain containment. Returns undefined rather than guessing.
+ */
+export function matchOption(value: string, options: string[]): string | undefined {
+  const norm = (x: string) => ` ${x.toLowerCase().replace(/\s+/g, ' ').trim()} `;
+  const opts = options.filter((o) => o && !/^(select|choose|--|please select)/i.test(o.trim()));
+  const exact = opts.find((o) => norm(o) === norm(value) || norm(o) === norm(humanize(value)));
+  if (exact) return exact;
+  for (const w of ENUM_WORDS[value] ?? []) {
+    // "no" must not match "not a protected veteran", so short words need word boundaries.
+    const re = w.length <= 3 ? new RegExp(`\\b${w.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i') : null;
+    // A positive answer must not land on a negated option ("I am NOT a protected veteran").
+    const negated = (o: string) => /\bnot\b|n't|\bno,/i.test(o) && !/\bnot\b|n't|\bno\b/i.test(w);
+    const hit = opts.find((o) => !negated(o) && (re ? re.test(o) : norm(o).includes(w)));
+    if (hit) return hit;
+  }
+  return opts.find((o) => norm(o).includes(norm(value).trim()) || norm(value).includes(norm(o).trim()));
+}
+
+/** Years with one named skill, for "How many years of experience do you have with React?". */
+function skillYears(text: string, ctx: ApplyContext): string | undefined {
+  const m = text.match(/\b(?:with|in|using)\s+([^?*]{1,40}?)\s*[?*]*\s*$/i);
+  if (!m) return undefined;
+  const asked = m[1].replace(/\?|\*/g, '').trim().toLowerCase();
+  const skill = ctx.profile.skills?.find((s) => s.years != null && (asked.startsWith(s.name.toLowerCase()) || s.name.toLowerCase() === asked));
+  return skill ? String(skill.years) : undefined;
+}
+
 export function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined {
   const p = ctx.profile;
-  const text = `${f.label} ${f.name}`.toLowerCase();
+  const label = (f.groupLabel || f.label).toLowerCase().trim();
+  const name = f.name.toLowerCase().trim();
+  const text = `${label} ${name}`;
+  // Anchored patterns test the label and the name separately; the combined string only matches
+  // `^` at the label's start, so `name="country"` with a label like "Country of residence *" still hits.
+  const either = (re: RegExp) => re.test(label) || re.test(name);
   const [first = '', ...rest] = (p.fullName ?? '').split(/\s+/);
   const link = (re: RegExp) => p.links?.find((l) => re.test(l.label) || re.test(l.url))?.url;
+  const yesNo = (b: boolean | undefined) => (b === undefined ? undefined : b ? 'Yes' : 'No');
 
   // 1. Cover letter / why us / statement
   if (f.tag === 'textarea' && /cover letter|why .*(join|work|interested)|statement|additional info/i.test(text)) {
@@ -66,60 +142,59 @@ export function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined 
   // 2. Personal contact info
   if (/first.?name|given name/i.test(text)) return p.firstName || first || undefined;
   if (/last.?name|surname|family name/i.test(text)) return p.lastName || (rest.length ? rest.join(' ') : undefined);
-  if (/full.?name|^name\b|your name/i.test(text)) return p.fullName || (p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : undefined);
+  if (/full.?name|your name/i.test(text) || either(/^name\b/i)) return p.fullName || (p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : undefined);
   if (/e-?mail/i.test(text)) return p.email || undefined;
   if (/phone|mobile|telephone/i.test(text)) return p.phone || undefined;
+  if (/pronoun/i.test(text)) return p.pronouns || undefined;
 
   // 3. Socials & Portfolios (including LinkedIn)
-  if (/linkedin|linked in|social profile|public profile/i.test(text)) return p.linkedinUrl || link(/linkedin/i) || undefined;
+  if (/linkedin|linked in/i.test(text)) return p.linkedinUrl || link(/linkedin/i) || undefined;
   if (/github|git repository|code sample/i.test(text)) return p.githubUrl || link(/github/i) || undefined;
-  if (/portfolio|personal (site|website)|website|work sample/i.test(text)) return p.portfolioUrl || link(/portfolio|website|site/i) || p.links?.[0]?.url || undefined;
   if (/twitter|x\.com/i.test(text)) return p.twitterUrl || link(/twitter|x\.com/i) || undefined;
+  if (/portfolio|personal (site|website)|work sample/i.test(text) || either(/^website\b/i)) return p.portfolioUrl || link(/portfolio|website|site/i) || undefined;
 
   // 4. Headline & Summary
-  if (/headline|professional summary|bio|about (you|me)/i.test(text)) return p.headline || p.summary || undefined;
-  if (/skills|technologies|proficiencies/i.test(text)) return p.primarySkills?.join(', ') || undefined;
+  if (/headline|professional summary|\bbio\b|about (you|me)/i.test(text)) return p.summary || p.headline || undefined;
+  if (/^(skills|technologies|proficiencies)\b/i.test(label)) return p.primarySkills?.join(', ') || undefined;
 
   // 5. Address & Location
   if (/street (address)?|address line 1/i.test(text)) return p.address?.street || undefined;
-  if (/(zip|postal) code/i.test(text)) return p.address?.postalCode || undefined;
-  if (/^state\b|province|region/i.test(text)) return p.address?.state || undefined;
-  if (/^country\b/i.test(text)) return p.address?.country || undefined;
-  if (/^(location|city)\b|current location|where are you based|current city/i.test(text)) return p.address?.city || p.location || undefined;
+  if (/(zip|postal) code|postcode/i.test(text)) return p.address?.postalCode || undefined;
+  if (either(/^(state|province|region)\b/i)) return p.address?.state || undefined;
+  if (either(/^country\b/i) || /country of residence/i.test(text)) return p.address?.country || undefined;
+  if (either(/^(location|city)\b/i) || /current location|where are you based|current city/i.test(text)) return p.address?.city || p.location || undefined;
+  if (/relocat/i.test(text)) return yesNo(p.willingToRelocate);
 
   // 6. Work authorization & Legal eligibility
-  if (/authorized to work|legal.*authoriz|right to work/i.test(text)) {
+  if (/authori[sz]ed to work|legal.*authori[sz]|right to work|eligible to work/i.test(text)) {
     if (p.workAuthorization === 'authorized') return 'Yes';
     if (p.workAuthorization === 'not_authorized') return 'No';
     return undefined;
   }
-  if (/require.*sponsor|visa sponsor/i.test(text)) {
-    if (p.requiresSponsorship !== undefined) return p.requiresSponsorship ? 'Yes' : 'No';
-    return undefined;
-  }
-  if (/security clearance/i.test(text)) {
-    if (p.securityClearance && p.securityClearance !== 'none') return p.securityClearance;
-    return 'None';
-  }
+  if (/(future|will you).{0,40}sponsor/i.test(text)) return yesNo(p.futureSponsorship);
+  if (/require.*sponsor|visa sponsor|need.*sponsor/i.test(text)) return yesNo(p.requiresSponsorship);
+  if (/security clearance/i.test(text)) return p.securityClearance ? humanize(p.securityClearance) : undefined;
 
   // 7. Availability & Notice
   if (/start date|earliest.*start|when can you start/i.test(text)) return p.earliestStartDate || undefined;
-  if (/notice period|notice/i.test(text)) return p.noticePeriod || undefined;
+  if (/notice period/i.test(text)) return p.noticePeriod || undefined;
 
   // 8. Experience, current company & title
-  if (/years of (work )?experience|total experience/i.test(text)) {
+  if (/years of (work |professional |relevant )?experience|total experience/i.test(text) && !/(with|in|using)\s+\w/i.test(label.replace(/experience\s+in\s+(total|the industry)/i, ''))) {
     return p.yearsOfExperience !== undefined ? String(p.yearsOfExperience) : undefined;
+  }
+  if (/years?\b/i.test(text) && /experience|used|using|worked/i.test(text)) {
+    const y = skillYears(label, ctx);
+    if (y) return y;
   }
   if (/current (job )?title|current role|present role/i.test(text)) return p.currentTitle || undefined;
   if (/current (employer|company)|present company/i.test(text)) return p.currentCompany || undefined;
 
-  // 9. Education
-  if (/highest (level of )?education|education level|degree/i.test(text)) {
-    return p.highestEducationLevel || p.education?.[0]?.degree || undefined;
-  }
-  if (/university|college|school|institution/i.test(text)) {
-    return p.education?.[0]?.institution || undefined;
-  }
+  // 9. Education (institution first: "School / University" labels often also say "degree")
+  if (/highest (level of )?education|education level|highest degree/i.test(text)) return p.highestEducationLevel || undefined;
+  if (/university|college|school|institution/i.test(text)) return p.education?.[0]?.institution || undefined;
+  if (either(/^degree\b/i)) return p.education?.[0]?.degree || undefined;
+  if (/field of study|major|discipline/i.test(text)) return p.education?.[0]?.field || undefined;
 
   // 10. Compensation
   if (SALARY_RE.test(text)) {
@@ -127,9 +202,9 @@ export function knownValue(f: FieldInfo, ctx: ApplyContext): string | undefined 
   }
 
   // 11. EEO voluntary disclosures
-  if (/gender|sex\b/i.test(text)) return p.eeo?.gender || undefined;
+  if (/gender|\bsex\b/i.test(text)) return p.eeo?.gender || undefined;
   if (/veteran/i.test(text)) return p.eeo?.veteranStatus || undefined;
-  if (/disability/i.test(text)) return p.eeo?.disabilityStatus || undefined;
+  if (/disabilit/i.test(text)) return p.eeo?.disabilityStatus || undefined;
   if (/race|ethnicity|hispanic/i.test(text)) return p.eeo?.raceEthnicity || undefined;
 
   // Strict empty rule: if field not found in profile, return undefined (do NOT hallucinate)
@@ -155,6 +230,8 @@ export function planFill(fields: FieldInfo[], ctx: ApplyContext) {
   });
 
   for (const f of fields) {
+    // Passwords are handled by the sign-in/sign-up logic and are never asked for over WhatsApp.
+    if (f.type === 'password') continue;
     if (f.type === 'radio' || f.type === 'checkbox') {
       const k = f.name || `field-${f.idx}`;
       groups.set(k, [...(groups.get(k) ?? []), f]);
@@ -168,7 +245,9 @@ export function planFill(fields: FieldInfo[], ctx: ApplyContext) {
       continue;
     }
     const known = knownValue(f, ctx);
-    const value = known ?? answers.get(questionKey(label));
+    const raw = known ?? answers.get(questionKey(label));
+    // Selects must resolve to an actual option; if none means our value, ask instead of picking one.
+    const value = !raw ? undefined : f.tag === 'select' ? matchOption(raw, f.options) : f.tag === 'textarea' ? raw : humanize(raw);
     if (value) {
       fills.push({ idx: f.idx, kind: f.tag === 'select' ? 'select' : 'text', value });
       continue;
@@ -179,6 +258,16 @@ export function planFill(fields: FieldInfo[], ctx: ApplyContext) {
 
   for (const [name, group] of groups) {
     const label = group[0].groupLabel || (group.length === 1 ? group[0].label : name);
+    // Radio groups ("Are you authorized to work…?" Yes / No) can be answered from the profile too.
+    if (group[0].type === 'radio' && group.length > 1) {
+      const fromProfile = knownValue({ ...group[0], label, groupLabel: label }, ctx);
+      const option = fromProfile ? matchOption(fromProfile, group.map((g) => g.label)) : undefined;
+      const target = option ? group.find((g) => g.label === option) : undefined;
+      if (target) {
+        fills.push({ idx: target.idx, kind: 'check', value: 'on' });
+        continue;
+      }
+    }
     const saved = answers.get(questionKey(label));
     if (saved) {
       const target =
@@ -203,11 +292,11 @@ export function planFill(fields: FieldInfo[], ctx: ApplyContext) {
   return { fills, unknown, salary };
 }
 
-async function executeFill(page: Page, fills: Fill[]): Promise<void> {
+export async function executeFill(page: Page, fills: Fill[]): Promise<void> {
   for (const f of fills) {
     const loc = page.locator(`[data-javi-idx="${f.idx}"]`);
     if (f.kind === 'file') await loc.setInputFiles(f.value);
-    else if (f.kind === 'select') await loc.selectOption({ label: f.value }).catch(() => loc.selectOption(f.value));
+    else if (f.kind === 'select') await loc.selectOption({ label: f.value });
     else if (f.kind === 'check') await loc.check({ force: true });
     else await loc.fill(f.value);
     await page.waitForTimeout(200);
@@ -260,6 +349,13 @@ export const formAdapter: ChannelAdapter = {
         .first();
       if (!(await submit.count())) {
         return needs('no_form_found', 'The form was filled but no submit button was found. Please finish it yourself.', { payload: { screenshotPath: before } });
+      }
+
+      // Dry-run: the user's first few form applications stop here for them to check and submit.
+      if (await formDryRun(ctx.userId)) {
+        return needs('confirm_submission', `Practice run: JAVI filled ${ctx.job.company}'s form but did not submit it. Check the screenshot, then submit it yourself and mark it done.`, {
+          payload: { screenshotPath: before, dryRun: true },
+        });
       }
 
       await Promise.all([page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined), submit.click()]);

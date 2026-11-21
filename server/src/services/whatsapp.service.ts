@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { logger } from '../lib/logger';
 import { env } from '../config/env';
 import { Profile } from '../models/profile.model';
@@ -13,30 +12,66 @@ export interface WhatsAppMessagePayload {
 
 export type WhatsAppChannel = 'textmebot' | 'callmebot' | 'twilio' | 'cloudapi' | 'simulated';
 
+/**
+ * The text the user sees. For "needs you" tasks it lists the questions (with options and any
+ * suggested answer), the one-tap answer link, and, when the provider can receive replies, how to
+ * answer by text: "<code> <answer>", several answers separated by " | ", or "<code> done".
+ */
+export function formatMessage(payload: WhatsAppMessagePayload, canReplyByText: boolean): string {
+  const d = (payload.data ?? {}) as Record<string, any>;
+  const lines = [`🤖 *J.A.V.I*  ${payload.title}`];
+  if (d.jobTitle || d.company) lines.push(`_${[d.jobTitle, d.company].filter(Boolean).join(' · ')}_`);
+  lines.push('', payload.body);
+  const qs: Array<{ label: string; options?: string[]; suggested?: string }> = d.questions ?? [];
+  if (qs.length) {
+    lines.push('');
+    qs.forEach((q, i) => {
+      lines.push(`${i + 1}. ${q.label}`);
+      if (q.options?.length) lines.push(`   Options: ${q.options.slice(0, 8).join(' / ')}`);
+      if (q.suggested) lines.push(`   Suggested: "${q.suggested.slice(0, 300)}"`);
+    });
+  }
+  if (d.live) lines.push('', `⏳ The page is open in the JAVI browser window; JAVI continues as soon as you answer.`);
+  if (d.replyUrl) lines.push('', `👉 Answer here: ${d.replyUrl}`);
+  if (canReplyByText && d.replyCode) {
+    if (qs.length) lines.push(`Or reply: *${d.replyCode} your answer*${qs.length > 1 ? ' (separate answers with | )' : ''}`);
+    lines.push(`Reply *${d.replyCode} done* once you've handled it in the browser.`);
+  }
+  if (!d.replyUrl) lines.push('', `👉 Dashboard: ${env.APP_URL}/dash`);
+  return lines.join('\n');
+}
+
 export async function sendWhatsAppAlert(
   userId: string,
   payload: WhatsAppMessagePayload,
 ): Promise<{ sent: boolean; channel: WhatsAppChannel; to?: string; error?: string }> {
   try {
+    // A user's alert goes to that user's own phone, never to a shared fallback number.
     let rawPhone = payload.to;
-    if (!rawPhone && mongoose.connection.readyState === 1) {
-      const profile = await Profile.findOne({ userId }).catch(() => null);
-      rawPhone = profile?.phone;
-    }
-    rawPhone = rawPhone || env.WHATSAPP_TO;
     if (!rawPhone) {
-      logger.info({ userId }, 'No phone number configured for user, skipping WhatsApp alert');
-      return { sent: false, channel: 'simulated' };
+      const profile = await Profile.findOne({ userId }).catch(() => null);
+      rawPhone = profile?.phone || undefined;
+    }
+    if (!rawPhone) {
+      logger.info({ userId }, 'No phone number on the profile; skipping WhatsApp alert');
+      return { sent: false, channel: 'simulated', error: 'no phone number on profile' };
     }
 
     const cleanDigits = rawPhone.replace(/[^\d]/g, '');
-    const cleanPhoneWithPlus = rawPhone.startsWith('+') ? `+${cleanDigits}` : `+${cleanDigits}`;
+    const cleanPhoneWithPlus = `+${cleanDigits}`;
     const cleanDigitsNoPlus = cleanDigits;
 
-    const formattedMessage = `🤖 *J.A.V.I Alert*\n*${payload.title}*\n${payload.body}\n\n👉 Review on dashboard: ${env.APP_URL}/dash`;
+    // Replies by text only reach JAVI through providers with an inbound webhook (Twilio, Cloud API).
+    const canReply = (ch: WhatsAppChannel) => ch === 'twilio' || ch === 'cloudapi';
+    const formatted = (ch: WhatsAppChannel) => formatMessage(payload, canReply(ch));
+    const formattedMessage = formatted('textmebot');
 
     // 1. TextMeBot
-    if (env.WHATSAPP_PROVIDER === 'textmebot' || (env.TEXTMEBOT_APIKEY && !env.CALLMEBOT_APIKEY && !env.TWILIO_ACCOUNT_SID)) {
+    // The configured provider wins. Send-only providers are skipped when a reply-capable one
+    // (Twilio / Cloud API) is configured, because replies only come back to the number that sent.
+    const prefer = env.WHATSAPP_PROVIDER;
+    const replyCapablePreferred = prefer === 'twilio' || prefer === 'cloudapi';
+    if (prefer === 'textmebot' || (!replyCapablePreferred && prefer !== 'callmebot' && env.TEXTMEBOT_APIKEY)) {
       const apiKey = env.TEXTMEBOT_APIKEY || process.env.TEXTMEBOT_APIKEY;
       if (apiKey) {
         try {
@@ -55,7 +90,7 @@ export async function sendWhatsAppAlert(
     }
 
     // 2. CallMeBot
-    if (env.WHATSAPP_PROVIDER === 'callmebot' || env.CALLMEBOT_APIKEY) {
+    if (prefer === 'callmebot' || (!replyCapablePreferred && env.CALLMEBOT_APIKEY)) {
       const apiKey = env.CALLMEBOT_APIKEY || process.env.CALLMEBOT_APIKEY;
       if (apiKey) {
         try {
@@ -79,7 +114,7 @@ export async function sendWhatsAppAlert(
       const params = new URLSearchParams();
       params.append('From', `whatsapp:${env.TWILIO_WHATSAPP_FROM}`);
       params.append('To', `whatsapp:${cleanPhoneWithPlus}`);
-      params.append('Body', formattedMessage);
+      params.append('Body', formatted('twilio'));
 
       try {
         const twilioRes = await fetch(
@@ -120,7 +155,7 @@ export async function sendWhatsAppAlert(
               messaging_product: 'whatsapp',
               to: cleanDigitsNoPlus,
               type: 'text',
-              text: { body: formattedMessage },
+              text: { body: formatted('cloudapi') },
             }),
             signal: AbortSignal.timeout(4000),
           },
@@ -144,10 +179,10 @@ export async function sendWhatsAppAlert(
         title: payload.title,
         body: payload.body,
       },
-      `📱 [WhatsApp Notification Dispatched to ${cleanPhoneWithPlus}]: ${payload.title} - ${payload.body}`,
+      `📱 [WhatsApp NOT delivered (no provider succeeded) to ${cleanPhoneWithPlus}]:\n${formattedMessage}`,
     );
 
-    return { sent: true, channel: 'simulated', to: cleanPhoneWithPlus };
+    return { sent: false, channel: 'simulated', to: cleanPhoneWithPlus, error: 'no WhatsApp provider succeeded' };
   } catch (err: any) {
     logger.error({ err: err?.message, userId }, 'Failed to dispatch WhatsApp notification');
     return { sent: false, channel: 'simulated', error: err?.message };

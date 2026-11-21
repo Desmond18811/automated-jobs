@@ -11,7 +11,7 @@
     ".git"
   ],
   "exec": "tsx src/index.ts",
-  "delay": 200,
+  "delay": 600,
   "restartable": "rs",
   "env": {
     "NODE_ENV": "development"

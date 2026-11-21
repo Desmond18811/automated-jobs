@@ -1,13 +1,13 @@
 import type { FC } from "react";
 
-export const JaviGlyph: FC<{ size?: number; color?: string }> = ({ size = 18, color = "#0b0b0c" }) => (
+export const JaviGlyph: FC<{ size?: number; color?: string }> = ({ size = 22, color = "#0b0b0c" }) => (
   <div
     style={{
       width: size,
       height: size,
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
-      gap: 1,
+      gap: 1.5,
     }}
   >
     <div style={{ background: color, borderRadius: "50% 50% 0 50%" }} />
@@ -16,6 +16,39 @@ export const JaviGlyph: FC<{ size?: number; color?: string }> = ({ size = 18, co
     <div style={{ background: color, borderRadius: "0 50% 50% 50%" }} />
   </div>
 );
+
+/**
+ * Standard Javi Brand Mark: Shared logo glyph + wordmark for 100% visual consistency across all pages.
+ */
+export const JaviBrandMark: FC<{
+  glyphSize?: number;
+  fontSize?: number;
+  color?: string;
+  style?: React.CSSProperties;
+}> = ({
+  glyphSize = 24,
+  fontSize = 22,
+  color = "#0b0b0c",
+  style,
+}) => (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 9,
+        fontWeight: 700,
+        fontSize: fontSize,
+        letterSpacing: "-.5px",
+        color: color,
+        fontFamily: "Montserrat, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        userSelect: "none",
+        ...style,
+      }}
+    >
+      <JaviGlyph size={glyphSize} color={color} />
+      <span>J.A.V.I</span>
+    </span>
+  );
 
 export const LOGO_SVGS = {
   "indeed": "data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjMDAzQTlCIiByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+SW5kZWVkPC90aXRsZT48cGF0aCBkPSJNMTEuNTY2IDIxLjU2MzN2LTguNzYyYy4yNTUzLjAyMzEuNTAwOS4wMzQ2Ljc1OC4wMzQ2IDEuMjIyNSAwIDIuMzczOS0uMzIwNiAzLjM1MDYtLjg5Mjh2OS42MTgyYzAgLjgyMTktLjE5NTcgMS40Mjg3LS41NzU3IDEuODMzOC0uMzc4LjQwMzMtLjg4MDguNjA0OS0xLjQ5MS42MDQ5LS42MDA3IDAtMS4wNzY2LS4yMDE2LTEuNDY4LS42MTgzLS4zNzgxLS40MDMyLS41NzM5LTEuMDEtLjU3MzktMS44MTg0ek0xMS41ODkuNTY1OWMyLjU0NDctLjg5MjkgNS40NDI0LS44NDQ5IDcuNjE4Ni45ODcuNDA1LjM2ODcuODY3My44MzM0IDEuMDUxNSAxLjM4MDYuMjIwNy42OTEzLS43Njk1LS4wNzMtLjkwNTctLjE2Ny0uNzEtLjQ1MzItMS40MTgyLS44MzM0LTIuMjEyNy0xLjA5NDZDMTIuODYxNC4zODczIDguODEyMiAyLjcwOSA2LjI5NDUgNi4zMTVjLTEuMDUxNiAxLjU5MzktMS43MzY3IDMuMjcyMS0yLjI5OSA1LjExNzQtLjA2MTQuMjAxNy0uMTA5NC40NjQ3LS4yMjA3LjY0MTMtLjExMTMuMjAzNi0uMDQ4LS41NDUzLS4wNDgtLjU3MDIuMDg0NS0uNzYyMy4yNDM4LTEuNDk5Ny40NDE0LTIuMjM3QzUuMzI5MiA1LjMzNzUgNy44OTcgMi4wNjU1IDExLjU4OTEuNTY1OHptNC45MjgxIDcuMDU4N2MwIDEuNjY4Ni0xLjM1MyAzLjAyMjQtMy4wMjA1IDMuMDIyNC0xLjY2NzcgMC0zLjAxODYtMS4zNTM4LTMuMDE4Ni0zLjAyMjQgMC0xLjY2ODcgMS4zNTEtMy4wMjI0IDMuMDE4Ni0zLjAyMjQgMS42Njc2IDAgMy4wMjA1IDEuMzUxOCAzLjAyMDUgMy4wMjI0WiIvPjwvc3ZnPg==",

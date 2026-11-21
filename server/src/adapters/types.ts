@@ -6,7 +6,7 @@ import type { NeedsReason, TaskQuestion } from '../models/task.model';
 /** Every adapter returns exactly one of: sent, needs_user, failed. */
 export type AdapterResult =
   | { status: 'sent'; ref?: { messageId?: string; threadId?: string }; screenshotPath?: string; detail?: string }
-  | { status: 'needs_user'; reason: NeedsReason; detail: string; questions?: TaskQuestion[]; payload?: Record<string, unknown> }
+  | { status: 'needs_user'; reason: NeedsReason; detail: string; questions?: TaskQuestion[]; payload?: Record<string, unknown>; /** Task already opened (live sessions); don't open another. */ taskId?: string }
   | { status: 'failed'; error: string; retryable: boolean };
 
 export interface ApplyContext {

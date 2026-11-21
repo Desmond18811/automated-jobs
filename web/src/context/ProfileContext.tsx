@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type FC, type ReactNode } from 'react';
-import { EMPTY_PROFILE, DEFAULT_PROFILE, type UserProfile } from '@/types/profile';
+import { EMPTY_PROFILE, type UserProfile } from '@/types/profile';
 import { profileApi } from '@/api';
 
 interface ProfileContextType {
@@ -21,27 +21,22 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.fullName || parsed.firstName || parsed.email) {
-          return { ...DEFAULT_PROFILE, ...parsed };
+          return { ...EMPTY_PROFILE, ...parsed };
         }
       }
     } catch (err) {
       console.warn('Could not load profile from localStorage', err);
     }
-    return DEFAULT_PROFILE;
+    return EMPTY_PROFILE;
   });
 
+  /** The server is the source of truth: replace local state with GET /profile, keeping only schema defaults underneath. */
   const refreshProfile = async () => {
     try {
       const res = await profileApi.get();
       const data = res?.profile || res;
-      if (data && (data.email || data.fullName || data.firstName || data.headline || data.targetRoles?.length)) {
-        setProfileState((prev) => {
-          const merged = { ...prev, ...data };
-          if (data.firstName || data.lastName) {
-            merged.fullName = `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.fullName || prev.fullName;
-          }
-          return merged;
-        });
+      if (data && typeof data === 'object' && data.userId) {
+        setProfileState({ ...EMPTY_PROFILE, ...data, rules: { ...EMPTY_PROFILE.rules, ...data.rules } });
       }
     } catch {
       // Unauthenticated or offline: keep local state
@@ -73,7 +68,7 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const resetToDefault = () => {
-    setProfileState(DEFAULT_PROFILE);
+    setProfileState(EMPTY_PROFILE);
   };
 
   return (

@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { NOTIFICATIONS } from '@/lib/constants';
 import { useNotificationCycle } from '@/hooks/useNotificationCycle';
+import { useIsMobile } from '@/hooks/useStageScale';
 
 const SLOTS: Record<string, { top: number; sc: number; op: number; z: number; bg: string }> = {
   '0': { top: 427, sc: 1, op: 1, z: 5, bg: '#fff' },
@@ -89,10 +90,96 @@ const Avatar: FC<{ av: string }> = ({ av }) => {
 
 export const NotificationStack: FC = () => {
   const tick = useNotificationCycle(NOTIFICATIONS.length);
+  const isMobile = useIsMobile();
   const N = NOTIFICATIONS.length;
 
+  if (isMobile) {
+    return (
+      <div
+        style={{
+          position: 'relative',
+          width: 292,
+          height: 168,
+          margin: '22px auto 6px',
+          pointerEvents: 'none',
+          animation: 'jj-hero-fade-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.52s backwards',
+        }}
+      >
+        {NOTIFICATIONS.map((n, i) => {
+          const k = ((i - tick) % N + N) % N;
+          const sl = k <= 2 ? SLOTS[String(k)] : k === N - 1 ? SLOTS.exit : SLOTS.hidden;
+          const mobileTop = sl.top - 418;
+
+          return (
+            <div
+              key={n.id}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: mobileTop,
+                width: 292,
+                height: 52,
+                boxSizing: 'border-box',
+                background: sl.bg,
+                border: '1px solid #efeff2',
+                borderRadius: 10,
+                boxShadow: k === 0 ? '0 10px 24px rgba(30,40,90,.09)' : '0 6px 14px rgba(30,40,90,.05)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '0 12px',
+                transform: `translateX(-50%) scale(${sl.sc})`,
+                transformOrigin: '50% 0',
+                opacity: sl.op,
+                zIndex: sl.z,
+                transition:
+                  'top .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1), opacity .6s ease, background .6s ease',
+              }}
+            >
+              <Avatar av={n.av} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, textAlign: 'left' }}>
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    color: '#55555c',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: '#0b0b0c' }}>{n.b}</span>
+                  {n.t}
+                  {n.b2 && <span style={{ fontWeight: 600, color: '#0b0b0c' }}>{n.b2}</span>}
+                </span>
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    color: '#6a6a72',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {n.sub}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Desktop NotificationStack
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        animation: 'jj-hero-fade-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.52s backwards',
+      }}
+    >
       {NOTIFICATIONS.map((n, i) => {
         const k = ((i - tick) % N + N) % N;
         const sl = k <= 2 ? SLOTS[String(k)] : k === N - 1 ? SLOTS.exit : SLOTS.hidden;

@@ -33,6 +33,7 @@ export const CornerGlow: FC = () => (
 
 export const StageFrame: FC = () => (
   <div
+    className="jj-stage-frame"
     style={{
       position: 'fixed',
       inset: 12,

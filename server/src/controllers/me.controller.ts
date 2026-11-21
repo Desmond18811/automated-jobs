@@ -12,22 +12,30 @@ import { Notification } from '../models/notification.model';
 import { Profile } from '../models/profile.model';
 import { Suppression } from '../models/suppression.model';
 import { Task } from '../models/task.model';
+import { SiteAccount } from '../models/siteAccount.model';
+import { BusinessLead } from '../models/businessLead.model';
+import { BusinessServices } from '../models/businessServices.model';
+import { TaxonomyRequest } from '../models/taxonomyRequest.model';
 import { verifyPassword } from '../services/auth.service';
 import { disconnectGmail } from '../services/gmail.service';
 
 export class MeController {
   static async exportData(req: Request, res: Response) {
     const userId = currentUser(req);
-    const [user, profile, applications, tasks, notifications, audit] = await Promise.all([
+    const [user, profile, applications, tasks, notifications, audit, siteAccounts, businessLeads, businessServices] = await Promise.all([
       User.findById(userId, { passwordHash: 0, 'gmail.refreshTokenEnc': 0 }).lean(),
       Profile.findOne({ userId }).lean(),
       Application.find({ userId }).lean(),
       Task.find({ userId }).lean(),
       Notification.find({ userId }).lean(),
       AuditLog.find({ userId }).lean(),
+      // Which sites JAVI holds an account on, never the passwords.
+      SiteAccount.find({ userId }, { passwordEnc: 0 }).lean(),
+      BusinessLead.find({ userId }).lean(),
+      BusinessServices.findOne({ userId }).lean(),
     ]);
     res.setHeader('Content-Disposition', 'attachment; filename="javi-export.json"');
-    res.json({ exportedAt: new Date(), user, profile, applications, tasks, notifications, audit });
+    res.json({ exportedAt: new Date(), user, profile, applications, tasks, notifications, audit, siteAccounts, businessLeads, businessServices });
   }
 
   static async deleteAccount(req: Request, res: Response) {
@@ -35,6 +43,7 @@ export class MeController {
     const { password } = parseBody(z.object({ password: z.string().min(1) }), req.body);
     await verifyPassword(userId, password);
 
+    const email = (await User.findById(userId, { email: 1 }).lean())?.email;
     await disconnectGmail(userId).catch((err) => logger.warn({ err }, 'gmail revoke failed during deletion'));
     const files = await removeUserFiles(userId);
     await Promise.all([
@@ -45,6 +54,10 @@ export class MeController {
       Suppression.deleteMany({ userId }),
       RefreshToken.deleteMany({ userId }),
       Profile.deleteOne({ userId }),
+      SiteAccount.deleteMany({ userId }),
+      BusinessLead.deleteMany({ userId }),
+      BusinessServices.deleteOne({ userId }),
+      ...(email ? [TaxonomyRequest.deleteMany({ email })] : []),
     ]);
     await User.deleteOne({ _id: userId });
     logger.info({ files }, 'account deleted');

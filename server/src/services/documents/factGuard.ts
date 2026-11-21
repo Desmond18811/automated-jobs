@@ -106,3 +106,21 @@ export function checkFacts(texts: (string | undefined)[], v: FactVocab): FactChe
 
   return { passed: blocking.size === 0, blocking: [...blocking], warnings: [...warnings] };
 }
+
+/**
+ * Fact base for Business Mode pitches: the user's services profile and the case studies they may
+ * share ("profile"), and what JAVI knows about the lead: its name and area, audit evidence and the
+ * owner's own numbers ("job"). Anything else, such as an invented statistic or client, is blocked.
+ */
+export function buildBusinessVocab(input: { ownFacts: string[]; leadFacts: string[]; expected: string[] }): FactVocab {
+  const profileText = input.ownFacts.filter(Boolean).join('\n');
+  const jobText = input.leadFacts.filter(Boolean).join('\n');
+  return {
+    profileText: profileText.toLowerCase(),
+    profileWords: wordsOf(profileText),
+    jobText: jobText.toLowerCase(),
+    jobWords: wordsOf(jobText),
+    expected: wordsOf(input.expected.join(' ')),
+    numbers: new Set([...numbersOf(profileText), ...numbersOf(jobText)]),
+  };
+}

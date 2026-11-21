@@ -1,3 +1,4 @@
+import { env } from '../config/env';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { AppError } from './http';
@@ -31,7 +32,8 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new AppError(400, 'Only http(s) links are allowed');
   const addrs = await dns.lookup(url.hostname, { all: true }).catch(() => []);
   if (!addrs.length) throw new AppError(400, `Could not resolve ${url.hostname}`);
-  if (addrs.some((a) => isPrivateIp(a.address))) throw new AppError(400, 'That link points to a private network address');
+  const allowPrivate = env.ALLOW_PRIVATE_URLS && env.NODE_ENV !== 'production';
+  if (!allowPrivate && addrs.some((a) => isPrivateIp(a.address))) throw new AppError(400, 'That link points to a private network address');
   return url;
 }
 

@@ -1,3 +1,4 @@
+import { env } from '../config/env';
 import { redis } from '../lib/redis';
 import { normalizeCompany } from '../lib/normalize';
 import { localParts, minutesUntilWindow } from '../lib/time';
@@ -64,4 +65,21 @@ export async function releaseDailySlot(userId: string, rules: Rules): Promise<vo
   const key = capKey(userId, rules);
   const n = await redis.decr(key);
   if (n < 0) await redis.set(key, '0');
+}
+
+/** Auto mode only unlocks after the user has approved this many drafts themselves. */
+export const MIN_REVIEWED_FOR_AUTO = 10;
+
+export async function userApprovalCount(userId: string): Promise<number> {
+  return Application.countDocuments({ userId, 'history.note': 'approved by you' });
+}
+
+/**
+ * Dry-run: a user's first FORM_DRY_RUN_FIRST form applications are filled and screenshotted but not
+ * submitted until they confirm, so they can check JAVI's work before trusting it.
+ */
+export async function formDryRun(userId: string): Promise<boolean> {
+  if (!env.FORM_DRY_RUN_FIRST) return false;
+  const sent = await Application.countDocuments({ userId, channel: 'form', status: { $in: SENT_STATES } });
+  return sent < env.FORM_DRY_RUN_FIRST;
 }

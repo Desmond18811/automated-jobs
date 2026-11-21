@@ -6,7 +6,9 @@ import { transition } from './stateMachine';
 import { audit } from '../models/audit.model';
 import { notify } from './notification.service';
 import { Profile } from '../models/profile.model';
-import { Task, type NeedsReason, type TaskQuestion } from '../models/task.model';
+import crypto from 'node:crypto';
+import { replyUrl } from '../lib/replyToken';
+import { Task, type NeedsReason, type TaskDoc, type TaskQuestion } from '../models/task.model';
 
 const TITLES: Record<NeedsReason, string> = {
   unknown_question: 'A form asked something new',
@@ -20,6 +22,17 @@ const TITLES: Record<NeedsReason, string> = {
   reconnect_gmail: 'Reconnect Gmail',
 };
 
+/** A 4-digit code that's unique among the user's open tasks, so a WhatsApp reply maps to one task. */
+async function newReplyCode(userId: string): Promise<string> {
+  const open = await Task.find({ userId, status: 'open' }, { replyCode: 1 }).lean();
+  const taken = new Set(open.map((t: any) => t.replyCode));
+  for (let i = 0; i < 50; i++) {
+    const code = String(crypto.randomInt(1000, 10000));
+    if (!taken.has(code)) return code;
+  }
+  return String(crypto.randomInt(10000, 100000));
+}
+
 export async function openTask(input: {
   userId: string;
   applicationId?: string;
@@ -27,15 +40,52 @@ export async function openTask(input: {
   message: string;
   questions?: TaskQuestion[];
   payload?: Record<string, unknown>;
+  /** A live browser session is holding the page open and will continue as soon as this is answered. */
+  live?: boolean;
 }) {
-  const task = await Task.create({ ...input, questions: input.questions ?? [] });
+  const replyCode = await newReplyCode(input.userId);
+  const task = await Task.create({ ...input, questions: input.questions ?? [], replyCode });
   await notify(input.userId, {
     type: 'needs_user',
     title: TITLES[input.reason],
     body: input.message,
-    data: { taskId: task.id, applicationId: input.applicationId },
+    data: {
+      taskId: task.id,
+      applicationId: input.applicationId,
+      replyCode,
+      replyUrl: replyUrl(task.id),
+      live: input.live,
+      questions: (input.questions ?? []).map((q) => ({ label: q.label, options: q.options, suggested: q.suggested })),
+      jobTitle: input.payload?.jobTitle,
+      company: input.payload?.company,
+    },
   });
   return task;
+}
+
+/**
+ * Hold a live session until the user handles the task (dashboard, reply link or WhatsApp reply),
+ * or `until()` reports the page no longer needs them (e.g. the CAPTCHA disappeared because they
+ * solved it in the window). Returns the final task, or null on timeout.
+ */
+export async function waitForTask(
+  taskId: string,
+  opts: { timeoutMs: number; until?: () => Promise<boolean>; pollMs?: number },
+): Promise<TaskDoc | null> {
+  const deadline = Date.now() + opts.timeoutMs;
+  while (Date.now() < deadline) {
+    const task = await Task.findById(taskId);
+    if (!task) return null;
+    if (task.status !== 'open') return task;
+    if (opts.until && (await opts.until().catch(() => false))) {
+      task.status = 'done';
+      task.live = false;
+      await task.save();
+      return task;
+    }
+    await new Promise((r) => setTimeout(r, opts.pollMs ?? 2500));
+  }
+  return null;
 }
 
 /** Answers that apply only to one application (e.g. salary for that role). */
@@ -100,6 +150,10 @@ export async function retryTask(userId: string, taskId: string) {
   return task;
 }
 
+/**
+ * Re-queue the application. A live session waiting on the task keeps the application in "approved"
+ * (it's still in flight), so this is a no-op there and the open page simply continues.
+ */
 async function resume(applicationId: Types.ObjectId | undefined, note: string) {
   if (!applicationId) return;
   const app = await Application.findById(applicationId);

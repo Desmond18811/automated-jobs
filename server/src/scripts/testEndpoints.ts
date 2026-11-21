@@ -526,7 +526,26 @@ async function main() {
     else if (data?.token) authToken = data.token;
   });
 
+  await test('Google OAuth Login', 'POST', '/api/auth/google', 200, {
+    email: `google_${uniqueId}@gmail.com`,
+    name: 'Google Candidate',
+  });
+
   await test('Get Current User (Me)', 'GET', '/api/auth/me', 200);
+
+  // ---------------------------------------------------------------------------
+  // 2b. Taxonomy & Role-Skill Endpoints
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 2b. Taxonomy & Role-Skill Endpoints ---');
+  await test('Get Roles Taxonomy', 'GET', '/api/taxonomy/roles', 200);
+  await test('Get Industries Taxonomy', 'GET', '/api/taxonomy/industries', 200);
+  await test('Get Locations Taxonomy', 'GET', '/api/taxonomy/locations', 200);
+  await test('Get Headline-Derived Skills', 'GET', '/api/taxonomy/skills?headline=Senior%20Product%20Designer%20Fintech', 200);
+  await test('Submit Missing Taxonomy Option', 'POST', '/api/taxonomy/request', 201, {
+    role_name: 'Rust Blockchain Core Dev',
+    industry_name: 'DeFi & Cryptography',
+    context: 'Looking for specialized Web3 systems jobs',
+  });
 
   // ---------------------------------------------------------------------------
   // 3. Profile Operations
@@ -601,24 +620,25 @@ async function main() {
   // 8. Business Mode Discovery & Outreach
   // ---------------------------------------------------------------------------
   console.log('\n--- 8. Business Mode Discovery & Outreach ---');
-  await test('Search Nearby Businesses', 'POST', '/api/business/search', 200, {
-    query: 'Fintech',
-    location: 'Lekki, Lagos',
-    radiusKm: 10,
+  // Lead search hits OpenStreetMap, so this suite adds a lead by hand (no network).
+  await test('Business Catalog', 'GET', '/api/business/catalog', 200);
+  await test('Business Services Profile', 'GET', '/api/business/services', 200);
+  await test('Add Business Lead', 'POST', '/api/business/leads', 201, {
+    name: 'Test Bistro',
+    vertical: 'restaurant',
+    area: 'Lekki, Lagos',
+    contacts: [{ kind: 'phone', value: '08030000000', isBusinessLine: true }],
   }, (data) => {
-    if (data?.leads && data.leads.length > 0) {
-      testLeadId = data.leads[0]._id;
-    }
+    testLeadId = data?._id || data?.id;
   });
-
-  await test('List Qualified Business Leads', 'GET', '/api/business/leads', 200);
+  await test('List Business Leads', 'GET', '/api/business/leads', 200);
 
   if (testLeadId) {
-    await test('Get Business Lead Intelligence', 'GET', `/api/business/leads/${testLeadId}`, 200);
-    await test('Generate Value Pitch', 'POST', `/api/business/leads/${testLeadId}/pitch`, 200);
-    await test('Start Outreach Sequence', 'POST', `/api/business/leads/${testLeadId}/sequence/start`, 200);
-    await test('Pause Outreach Sequence', 'POST', `/api/business/leads/${testLeadId}/sequence/pause`, 200);
-    await test('Dismiss Business Lead', 'POST', `/api/business/leads/${testLeadId}/dismiss`, 200);
+    await test('Get Business Lead', 'GET', `/api/business/leads/${testLeadId}`, 200);
+    await test('Quote Business Lead', 'POST', `/api/business/leads/${testLeadId}/quote`, 200);
+    await test('Draft First Message', 'POST', `/api/business/leads/${testLeadId}/pitch`, 201, { variant: 'observation', channel: 'whatsapp' });
+    await test('Call Scripts', 'GET', `/api/business/leads/${testLeadId}/scripts`, 200);
+    await test('Lose Lead Without Reason (rejected)', 'POST', `/api/business/leads/${testLeadId}/status`, 400, { to: 'lost' });
   }
 
   // ---------------------------------------------------------------------------

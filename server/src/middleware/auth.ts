@@ -61,6 +61,38 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
   next(new AppError(401, 'Invalid or expired access token'));
 };
 
+export const optionalAuth: RequestHandler = async (req, _res, next) => {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return next();
+  const token = header.slice(7);
+
+  try {
+    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, { audience: 'javi-api' }) as jwt.JwtPayload;
+    if (payload.sub) {
+      req.userId = payload.sub;
+      return next();
+    }
+  } catch {
+    // Try Clerk
+  }
+
+  const secretKey = process.env.CLERK_SECRET_KEY || env.CLERK_SECRET_KEY;
+  if (secretKey) {
+    try {
+      const { verifyToken } = await import('@clerk/backend');
+      const verified: any = await verifyToken(token, { secretKey });
+      if (verified?.sub) {
+        req.userId = verified.sub;
+        return next();
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  next();
+};
+
 export function currentUser(req: Request): string {
   if (!req.userId) throw new AppError(401, 'Not signed in');
   return req.userId;

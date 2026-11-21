@@ -11,7 +11,14 @@ import { User } from '../models/user.model';
  * needs gmail.readonly or gmail.metadata, which Google classes as "restricted" and which needs a
  * security assessment before public launch. Keep them separate so sending can ship first.
  */
-export const GMAIL_SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send'];
+const READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export const GMAIL_SCOPES = [
+  'openid',
+  'email',
+  'https://www.googleapis.com/auth/gmail.send',
+  // Opt-in: lets the live browser read sign-up verification codes instead of asking on WhatsApp.
+  ...(env.GMAIL_READ_CODES ? [READONLY_SCOPE] : []),
+];
 
 export function oauthClient() {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new AppError(503, 'Gmail is not configured on this server');
@@ -106,4 +113,29 @@ export async function sendEmail(userId: string, msg: OutgoingEmail): Promise<{ m
     requestBody: { raw: buildMime(from, msg), threadId: msg.threadId },
   });
   return { messageId: res.data.id ?? '', threadId: res.data.threadId ?? '' };
+}
+
+/**
+ * A sign-up verification code that arrived after `since`. Only works when the user connected Gmail
+ * with the read-only scope (GMAIL_READ_CODES=true); otherwise returns null and the caller asks the user.
+ */
+export async function findVerificationCode(userId: string, since: Date, timeoutMs = 60_000): Promise<string | null> {
+  const user = await User.findById(userId);
+  if (!user?.gmail?.refreshTokenEnc || !user.gmail.scopes?.includes(READONLY_SCOPE)) return null;
+  const client = oauthClient();
+  client.setCredentials({ refresh_token: decrypt(user.gmail.refreshTokenEnc) });
+  const gmail = google.gmail({ version: 'v1', auth: client });
+  const after = Math.floor(since.getTime() / 1000) - 30;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const list = await gmail.users.messages.list({ userId: 'me', q: `after:${after} (code OR verification OR verify OR OTP)`, maxResults: 5 });
+    for (const m of list.data.messages ?? []) {
+      const msg = await gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'metadata', metadataHeaders: ['Subject'] });
+      const text = `${msg.data.payload?.headers?.find((h) => h.name === 'Subject')?.value ?? ''} ${msg.data.snippet ?? ''}`;
+      const code = text.match(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{4,8}\b/)?.[0];
+      if (code) return code;
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return null;
 }

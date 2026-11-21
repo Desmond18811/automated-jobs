@@ -11,6 +11,8 @@ export interface TaskQuestion {
   options?: string[];
   required: boolean;
   isSalary?: boolean;
+  /** An LLM-drafted answer from the profile and job (open-ended questions only). The user confirms or edits it. */
+  suggested?: string;
 }
 
 /** The "needs you" loop: anything JAVI must not guess becomes a task the user answers once. */
@@ -23,6 +25,10 @@ export interface ITask {
   payload?: Record<string, unknown>;
   status: 'open' | 'answered' | 'done' | 'dismissed';
   answers?: Record<string, string>;
+  /** 4-digit code the user puts at the start of a WhatsApp reply ("4821 yes"). */
+  replyCode?: string;
+  /** True while a live browser session is holding the page open, waiting on this task. */
+  live?: boolean;
 }
 
 const schema = new Schema<ITask>(
@@ -31,10 +37,12 @@ const schema = new Schema<ITask>(
     applicationId: { type: Schema.Types.ObjectId, ref: 'Application' },
     reason: { type: String, required: true },
     message: { type: String, default: '' },
-    questions: [{ _id: false, key: String, label: String, type: { type: String }, options: [String], required: Boolean, isSalary: Boolean }],
+    questions: [{ _id: false, key: String, label: String, type: { type: String }, options: [String], required: Boolean, isSalary: Boolean, suggested: String }],
     payload: Schema.Types.Mixed,
     status: { type: String, enum: ['open', 'answered', 'done', 'dismissed'], default: 'open' },
     answers: Schema.Types.Mixed,
+    replyCode: String,
+    live: Boolean,
   },
   { timestamps: true },
 );

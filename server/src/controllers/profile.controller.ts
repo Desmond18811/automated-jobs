@@ -10,9 +10,10 @@ import { currentUser } from '../middleware/auth';
 import { Application } from '../models/application.model';
 import { Profile } from '../models/profile.model';
 import { enqueueGenerate, queues, defaultJobOpts } from '../queues';
-import { detectAts, greenhouse, lever, ashby } from '../sources/ats';
+import { MIN_REVIEWED_FOR_AUTO, userApprovalCount } from '../services/safety.service';
+import { detectAts, greenhouse, lever, ashby, workable, smartrecruiters } from '../sources/ats';
 import { extractJobFromUrl, upsertJob } from '../services/job.service';
-import { CV_MIME, extractText, parseCv } from '../services/documents/cvParser';
+import { CV_MIME, extractText, parseCv, parseCvDeterministic } from '../services/documents/cvParser';
 import { llmEnabled } from '../services/documents/llm';
 
 export async function loadProfile(userId: string) {
@@ -53,19 +54,29 @@ export const LanguageSkillSchema = z.object({
   proficiency: z.enum(['basic', 'conversational', 'fluent', 'native']),
 });
 
+/** '' and whitespace-only strings mean "not provided". */
+const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
+
+/** An address whose fields are all blank is treated as not provided, so an untouched form never fails. */
+const blankAddressToUndefined = (v: unknown) => {
+  if (!v || typeof v !== 'object') return v;
+  return Object.values(v as Record<string, unknown>).every((x) => x == null || String(x).trim() === '') ? undefined : v;
+};
+
 export const UpdateProfileSchema = z
   .object({
     firstName: z.string().max(80),
     lastName: z.string().max(80),
     fullName: z.string().max(160),
     headline: z.string().max(160),
-    email: z.string().email(),
+    email: z.preprocess(blankToUndefined, z.string().email().optional()),
     phone: z.string().max(40),
     pronouns: z.string().max(40).optional(),
     location: z.string().max(120),
-    address: AddressSchema.optional(),
+    avatarUrl: z.string().optional().or(z.literal('')),
+    address: z.preprocess(blankAddressToUndefined, AddressSchema.optional()),
 
-    linkedinUrl: z.string().url(),
+    linkedinUrl: z.string().url().optional().or(z.literal('')),
     githubUrl: z.string().url().optional().or(z.literal('')),
     portfolioUrl: z.string().url().optional().or(z.literal('')),
     twitterUrl: z.string().url().optional().or(z.literal('')),
@@ -85,6 +96,10 @@ export const UpdateProfileSchema = z
     salaryExpectation: SalaryExpectationSchema.optional(),
     salaryFloor: z.object({ amount: z.number().positive().optional(), currency: z.string().length(3), period: z.enum(['hour', 'month', 'year']) }).optional(),
     yearsOfExperience: z.number().min(0).max(60),
+    inferredLevel: z.string().max(50).optional(),
+    validatedLevel: z.string().max(50).optional(),
+    industry: z.string().max(100).optional(),
+    specificTitle: z.string().max(120).optional(),
     currentCompany: z.string().max(100).optional(),
     currentTitle: z.string().max(100).optional(),
 
@@ -95,7 +110,7 @@ export const UpdateProfileSchema = z
     primarySkills: z.array(z.string().min(1).max(60)).max(50),
     secondarySkills: z.array(z.string().min(1).max(60)).max(50).optional(),
     toolsAndFrameworks: z.array(z.string().min(1).max(60)).max(50).optional(),
-    skills: z.array(z.object({ name: z.string().min(1).max(60), years: z.number().min(0).max(60).optional() })).max(80),
+    skills: z.array(z.object({ name: z.string().min(1).max(80), years: z.number().min(0).max(60).optional() })).max(80),
     languages: z.array(LanguageSkillSchema).max(20).optional(),
 
     experience: z.array(z.object({
@@ -129,39 +144,103 @@ export const UpdateProfileSchema = z
   })
   .partial();
 
-const MIN_REVIEWED_FOR_AUTO = 10;
+
+/** The profile as the client sees it: the CV's server path and full extracted text stay on the server. */
+function publicProfile(profile: any) {
+  const obj = typeof profile?.toObject === 'function' ? profile.toObject() : { ...profile };
+  if (obj.cv) {
+    const { path: _path, rawText: _raw, ...cv } = obj.cv;
+    obj.cv = cv;
+  }
+  return obj;
+}
+
+/** Fill the top-level fields the setup UI reads (names, social URLs) from what the parsers return. */
+function enrichParsed(parsed: any) {
+  const out = { ...parsed };
+  if (out.fullName && !out.firstName) {
+    const [first, ...rest] = String(out.fullName).trim().split(/\s+/);
+    out.firstName = first;
+    if (rest.length) out.lastName = rest.join(' ');
+  }
+  for (const link of Array.isArray(out.links) ? out.links : []) {
+    const url = String(link?.url || '');
+    if (!out.linkedinUrl && /linkedin\.com/i.test(url)) out.linkedinUrl = url;
+    else if (!out.githubUrl && /github\.com/i.test(url)) out.githubUrl = url;
+    else if (!out.twitterUrl && /(twitter|x)\.com/i.test(url)) out.twitterUrl = url;
+    else if (!out.portfolioUrl && /^https?:/i.test(url)) out.portfolioUrl = url;
+  }
+  return out;
+}
 
 export class ProfileController {
   static async getProfile(req: Request, res: Response) {
-    res.json(await loadProfile(currentUser(req)));
+    res.json(publicProfile(await loadProfile(currentUser(req))));
   }
 
   static async uploadCv(req: Request, res: Response) {
-    const userId = currentUser(req);
+    const userId = req.userId;
     const file = req.file;
     if (!file) throw new AppError(400, 'Attach your CV (PDF or DOCX) in the "cv" field');
 
-    const ext = file.mimetype === CV_MIME.pdf ? 'pdf' : 'docx';
-    const dest = await storagePath('cv', `${userId}-${Date.now()}.${ext}`);
-    await fs.writeFile(dest, file.buffer);
-    const rawText = await extractText(file.buffer, file.mimetype);
+    const rawText = await extractText(file.buffer, file.mimetype).catch(() => {
+      throw new AppError(422, 'This file looks damaged or isn\'t a real PDF/DOCX. Re-export it and try again, or fill in your profile manually.');
+    });
     if (rawText.trim().length < 200) {
       throw new AppError(422, 'Could not read enough text. If this is a scanned PDF, upload a text-based PDF or a DOCX.');
     }
 
-    const profile = await loadProfile(userId);
-    let warnings: string[] = [];
-    if (llmEnabled()) {
-      const parsed = await parseCv(rawText);
-      profile.set(parsed.data);
-      warnings = parsed.warnings;
-    } else {
-      warnings = ['Automatic parsing is off on this server. Fill in your profile manually.'];
+    // Only keep files we could actually read.
+    const ext = file.mimetype === CV_MIME.pdf ? 'pdf' : 'docx';
+    const dest = await storagePath('cv', `${userId || 'onboarding'}-${Date.now()}.${ext}`);
+    await fs.writeFile(dest, file.buffer);
+
+    let profile: any = null;
+    if (userId) {
+      profile = await loadProfile(userId);
     }
-    profile.cv = { originalName: file.originalname, path: dest, mime: file.mimetype, uploadedAt: new Date(), rawText, parseWarnings: warnings };
-    profile.status = 'draft';
-    await profile.save();
-    res.json({ profile, warnings, next: 'Review every section, fix anything wrong, then POST /api/profile/verify' });
+
+    let warnings: string[] = [];
+    let parsedData: any = null;
+
+    if (llmEnabled()) {
+      try {
+        const parsed = await parseCv(rawText);
+        parsedData = parsed.data;
+        warnings = parsed.warnings;
+      } catch (err: any) {
+        parsedData = parseCvDeterministic(rawText);
+        warnings = ['LLM parser fallback engaged; extracted profile details from document text.'];
+      }
+    } else {
+      parsedData = parseCvDeterministic(rawText);
+    }
+
+    if (parsedData) parsedData = enrichParsed(parsedData);
+
+    if (profile && parsedData) {
+      // Merge, don't overwrite: the deterministic parser returns empty arrays for experience etc.,
+      // and blank strings for anything it missed. Neither should erase what the user already has.
+      for (const [key, value] of Object.entries(parsedData)) {
+        if (value == null) continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        if (typeof value === 'string' && value.trim() === '') continue;
+        profile.set(key, value);
+      }
+      if (parsedData.skills?.length && !profile.primarySkills.length) {
+        profile.primarySkills = parsedData.skills.map((s: any) => (typeof s === 'string' ? s : s.name));
+      }
+      profile.cv = { originalName: file.originalname, path: dest, mime: file.mimetype, uploadedAt: new Date(), rawText, parseWarnings: warnings };
+      profile.status = 'draft';
+      await profile.save();
+    }
+
+    res.json({
+      profile: profile ? publicProfile(profile) : parsedData,
+      parsed: parsedData,
+      warnings,
+      message: 'CV uploaded and profile fields populated. All fields remain fully editable.',
+    });
   }
 
   static async updateProfile(req: Request, res: Response) {
@@ -170,8 +249,9 @@ export class ProfileController {
     const body = parseBody(UpdateProfileSchema, raw);
     const profile = await loadProfile(userId);
 
+    // Always enforced, including during onboarding: a draft profile must not start auto-sending.
     if (body.rules?.approvalMode === 'auto' && profile.rules.approvalMode !== 'auto') {
-      const reviewed = await Application.countDocuments({ userId, 'history.note': 'approved by you' });
+      const reviewed = await userApprovalCount(userId);
       if (reviewed < MIN_REVIEWED_FOR_AUTO) {
         throw new AppError(409, `Approve at least ${MIN_REVIEWED_FOR_AUTO} drafts yourself before turning on auto mode (${reviewed} so far).`);
       }
@@ -185,7 +265,7 @@ export class ProfileController {
     if (certifications) profile.certifications = certifications.map(withId);
     if (rules) profile.set('rules', { ...profile.toObject().rules, ...rules });
     await profile.save();
-    res.json(profile);
+    res.json(publicProfile(profile));
   }
 
   static async verify(req: Request, res: Response) {
@@ -205,7 +285,7 @@ export class ProfileController {
     ].filter(Boolean);
 
     if (missing.length) {
-      throw new AppError(422, `Please complete required profile fields before verifying: ${missing.join(', ')}`);
+      throw new AppError(422, `Please complete required profile fields before verifying: ${missing.join(', ')}`, 'profile_incomplete', { missing });
     }
 
     profile.status = 'verified';
@@ -236,6 +316,10 @@ export class ProfileController {
         rawJobs = await lever(detected.token).fetch();
       } else if (detected.ats === 'ashby' && detected.token) {
         rawJobs = await ashby(detected.token).fetch();
+      } else if (detected.ats === 'workable' && detected.token) {
+        rawJobs = await workable(detected.token).fetch();
+      } else if (detected.ats === 'smartrecruiters' && detected.token) {
+        rawJobs = await smartrecruiters(detected.token).fetch();
       } else {
         const single = await extractJobFromUrl(url).catch(() => null);
         if (single?.title && single?.company) {

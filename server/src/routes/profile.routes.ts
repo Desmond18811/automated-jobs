@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { asyncHandler } from '../lib/http';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 import { ProfileController } from '../controllers/profile.controller';
 import { CV_MIME } from '../services/documents/cvParser';
 
@@ -11,11 +12,14 @@ const upload = multer({
   fileFilter: (_req, file, cb) => cb(null, file.mimetype === CV_MIME.pdf || file.mimetype === CV_MIME.docx),
 });
 
-router.get('/', asyncHandler(ProfileController.getProfile));
-router.post('/cv', upload.single('cv'), asyncHandler(ProfileController.uploadCv));
-router.put('/', asyncHandler(ProfileController.updateProfile));
-router.post('/verify', asyncHandler(ProfileController.verify));
-router.post('/career-pages', asyncHandler(ProfileController.addCareerPage));
-router.delete('/career-pages', asyncHandler(ProfileController.removeCareerPage));
+// CV parsing allows optional auth (candidates can parse during onboarding even before session finalization)
+router.post('/cv', optionalAuth, upload.single('cv'), asyncHandler(ProfileController.uploadCv));
+
+// Authenticated profile endpoints
+router.get('/', requireAuth, asyncHandler(ProfileController.getProfile));
+router.put('/', requireAuth, asyncHandler(ProfileController.updateProfile));
+router.post('/verify', requireAuth, asyncHandler(ProfileController.verify));
+router.post('/career-pages', requireAuth, asyncHandler(ProfileController.addCareerPage));
+router.delete('/career-pages', requireAuth, asyncHandler(ProfileController.removeCareerPage));
 
 export default router;

@@ -123,3 +123,247 @@ export async function parseCv(rawText: string): Promise<{ data: ParsedProfile; w
   };
   return { data, warnings };
 }
+
+export const POPULAR_SKILL_KEYWORDS = [
+  'Figma',
+  'UI & UX Design',
+  'Design Systems',
+  'User Research',
+  'Prototyping',
+  'Wireframing',
+  'Interaction Design',
+  'Micro-interactions',
+  'Accessibility (WCAG)',
+  'React',
+  'TypeScript',
+  'JavaScript',
+  'Next.js',
+  'Vue',
+  'Angular',
+  'Tailwind CSS',
+  'HTML5 & CSS3',
+  'Redux',
+  'Zustand',
+  'Vite',
+  'Storybook',
+  'Node.js',
+  'Express',
+  'NestJS',
+  'Python',
+  'FastAPI',
+  'Django',
+  'Go (Golang)',
+  'Java',
+  'Spring Boot',
+  'C#',
+  '.NET',
+  'Rust',
+  'PostgreSQL',
+  'MySQL',
+  'MongoDB',
+  'Redis',
+  'GraphQL',
+  'REST APIs',
+  'SQL',
+  'Prisma',
+  'Drizzle ORM',
+  'Kafka',
+  'RabbitMQ',
+  'Docker',
+  'Kubernetes',
+  'AWS',
+  'GCP',
+  'Azure',
+  'Terraform',
+  'CI/CD',
+  'GitHub Actions',
+  'Linux',
+  'Nginx',
+  'Prometheus',
+  'Grafana',
+  'Flutter & Dart',
+  'React Native',
+  'Swift',
+  'SwiftUI',
+  'Kotlin',
+  'Jetpack Compose',
+  'Android SDK',
+  'Machine Learning',
+  'Artificial Intelligence',
+  'LLMs',
+  'Prompt Engineering',
+  'LangChain',
+  'PyTorch',
+  'TensorFlow',
+  'Data Modeling',
+  'Snowflake',
+  'dbt',
+  'Product Strategy',
+  'Roadmap Planning',
+  'Agile / Scrum',
+  'User Stories',
+  'A/B Testing',
+  'Product Analytics',
+  'Mixpanel',
+  'Amplitude',
+  'Cypress',
+  'Playwright',
+  'Selenium',
+  'PyTest',
+  'Jest',
+  'API Testing',
+  'Cybersecurity',
+  'Penetration Testing',
+  'OWASP Top 10',
+];
+
+/**
+ * Fast, deterministic regex/heuristic fallback parser for when external LLMs are unavailable or offline.
+ * Extracts candidate name, email, phone, location, headline, links, and real skills.
+ */
+export function parseCvDeterministic(rawText: string): ParsedProfile {
+  const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  // 1. Email
+  const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const email = emailMatch ? emailMatch[0] : undefined;
+
+  // 2. Phone
+  const phoneMatch = rawText.match(/(?:\+?\d{1,4}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,5}/);
+  const phone = phoneMatch ? phoneMatch[0] : undefined;
+
+  // 3. URLs
+  const linkedinMatch =
+    rawText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i) ||
+    rawText.match(/linkedin\.com\/in\/[a-zA-Z0-9_-]+/i);
+  const githubMatch =
+    rawText.match(/https?:\/\/(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i) ||
+    rawText.match(/github\.com\/[a-zA-Z0-9_-]+/i);
+  const portfolioMatch = rawText.match(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?/i);
+
+  const links: Array<{ label: string; url: string }> = [];
+  if (linkedinMatch) {
+    const url = linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`;
+    links.push({ label: 'LinkedIn', url });
+  }
+  if (githubMatch) {
+    const url = githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`;
+    links.push({ label: 'GitHub', url });
+  }
+  if (portfolioMatch && !portfolioMatch[0].includes('linkedin') && !portfolioMatch[0].includes('github')) {
+    links.push({ label: 'Portfolio', url: portfolioMatch[0] });
+  }
+
+  // 4. Candidate Name: First clean line with 2-4 words that isn't a header keyword
+  let fullName = '';
+  for (const line of lines.slice(0, 8)) {
+    if (
+      !/curriculum|resume|vitae|page|email|phone|http|github|linkedin|contact|profile|portfolio|@/i.test(line) &&
+      line.length >= 3 &&
+      line.length <= 40 &&
+      line.split(/\s+/).length >= 2 &&
+      line.split(/\s+/).length <= 4
+    ) {
+      fullName = line.replace(/[^\w\s'-]/g, '').trim();
+      break;
+    }
+  }
+
+  // 5. Headline: Look at lines 1-6 or check for role titles
+  let headline = '';
+  const roleKeywords = [
+    'designer',
+    'engineer',
+    'developer',
+    'architect',
+    'manager',
+    'lead',
+    'scientist',
+    'analyst',
+    'specialist',
+    'consultant',
+  ];
+  for (const line of lines.slice(0, 10)) {
+    if (line !== fullName && roleKeywords.some((rk) => line.toLowerCase().includes(rk)) && line.length <= 100) {
+      headline = line;
+      break;
+    }
+  }
+
+  // 6. Location: Look for Nigerian cities, African cities, or global locations
+  let location = '';
+  const locationTokens = [
+    'Lagos',
+    'Abuja',
+    'Port Harcourt',
+    'Ibadan',
+    'Enugu',
+    'Kano',
+    'Nigeria',
+    'Accra',
+    'Ghana',
+    'Nairobi',
+    'Kenya',
+    'London',
+    'United Kingdom',
+    'UK',
+    'New York',
+    'San Francisco',
+    'Toronto',
+    'Canada',
+    'Remote',
+    'Berlin',
+    'Germany',
+  ];
+  for (const tok of locationTokens) {
+    if (new RegExp(`\\b${tok}\\b`, 'i').test(rawText)) {
+      if (tok.toLowerCase() === 'nigeria' && !location) location = 'Lagos, Nigeria';
+      else if (['lagos', 'abuja', 'port harcourt', 'ibadan', 'enugu', 'kano'].includes(tok.toLowerCase()))
+        location = `${tok}, Nigeria`;
+      else if (['accra'].includes(tok.toLowerCase())) location = 'Accra, Ghana';
+      else if (['nairobi'].includes(tok.toLowerCase())) location = 'Nairobi, Kenya';
+      else if (['london'].includes(tok.toLowerCase())) location = 'London, United Kingdom';
+      else location = tok;
+      break;
+    }
+  }
+
+  // 7. Skills: match against curated dictionary
+  const lowerText = rawText.toLowerCase();
+  const matchedSkills: string[] = [];
+  for (const s of POPULAR_SKILL_KEYWORDS) {
+    const sLower = s.toLowerCase();
+    if (lowerText.includes(sLower) && !matchedSkills.includes(s)) {
+      matchedSkills.push(s);
+    }
+  }
+
+  // 8. Summary: Extract text between SUMMARY / ABOUT / PROFILE and next section
+  let summary = '';
+  const summaryHeaderIdx = lines.findIndex((l) =>
+    /^(summary|professional summary|profile|about me|about)$/i.test(l.trim()),
+  );
+  if (summaryHeaderIdx !== -1 && summaryHeaderIdx + 1 < lines.length) {
+    const nextLines: string[] = [];
+    for (let i = summaryHeaderIdx + 1; i < Math.min(lines.length, summaryHeaderIdx + 5); i++) {
+      if (/^(experience|work experience|employment|skills|education|projects|certifications)$/i.test(lines[i])) break;
+      nextLines.push(lines[i]);
+    }
+    summary = nextLines.join(' ').slice(0, 600);
+  }
+
+  return {
+    fullName: fullName || '',
+    headline: headline || undefined,
+    email: email || undefined,
+    phone: phone || undefined,
+    location: location || undefined,
+    summary: summary || undefined,
+    links,
+    skills: matchedSkills.slice(0, 25).map((name) => ({ name })),
+    experience: [],
+    education: [],
+    projects: [],
+    certifications: [],
+  };
+}

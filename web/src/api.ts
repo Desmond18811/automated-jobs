@@ -18,6 +18,9 @@ export class ApiError extends Error {
 
 const TOKEN_KEY = 'javi_access_token';
 
+/** Number of steps in the profile setup wizard (pages/profile-setup). */
+export const SETUP_STEP_COUNT = 9;
+
 export const tokenStorage = {
   get: (): string | null => {
     try {
@@ -42,6 +45,84 @@ export const tokenStorage = {
   },
   hasToken: (): boolean => !!tokenStorage.get(),
 };
+
+/**
+ * Candidate Authentication & Onboarding State Storage
+ * Tracks user details and exact funnel progress (otp_pending -> profile_setup -> completed)
+ */
+export const authStateStorage = {
+  getLastName: (): string => {
+    try {
+      return localStorage.getItem('javi_last_name') || localStorage.getItem('javi_user_name') || '';
+    } catch {
+      return '';
+    }
+  },
+  setLastName: (name: string): void => {
+    try {
+      if (name) {
+        localStorage.setItem('javi_last_name', name);
+        localStorage.setItem('javi_user_name', name);
+      }
+    } catch {}
+  },
+  getLastEmail: (): string => {
+    try {
+      return localStorage.getItem('javi_last_email') || '';
+    } catch {
+      return '';
+    }
+  },
+  setLastEmail: (email: string): void => {
+    try {
+      if (email) localStorage.setItem('javi_last_email', email);
+    } catch {}
+  },
+  getStage: (): string => {
+    try {
+      return localStorage.getItem('javi_onboarding_stage') || 'otp_pending';
+    } catch {
+      return 'otp_pending';
+    }
+  },
+  setStage: (stage: 'otp_pending' | 'profile_setup' | 'completed'): void => {
+    try {
+      localStorage.setItem('javi_onboarding_stage', stage);
+    } catch {}
+  },
+  getSetupStep: (): number => {
+    try {
+      const s = parseInt(localStorage.getItem('javi_setup_step') || '1', 10);
+      return s >= 1 && s <= SETUP_STEP_COUNT ? s : 1;
+    } catch {
+      return 1;
+    }
+  },
+  setSetupStep: (step: number): void => {
+    try {
+      localStorage.setItem('javi_setup_step', String(step));
+    } catch {}
+  },
+  saveSession: (user?: { name?: string; email?: string; onboardingStage?: string }): void => {
+    if (user?.name) authStateStorage.setLastName(user.name);
+    if (user?.email) authStateStorage.setLastEmail(user.email);
+    if (user?.onboardingStage) authStateStorage.setStage(user.onboardingStage as any);
+  },
+};
+
+/**
+ * Route candidate to their exact position in the funnel
+ */
+export function getRouteForStage(stage?: string, email?: string, name?: string): string {
+  if (stage === 'otp_pending') {
+    const q = email ? `?email=${encodeURIComponent(email)}${name ? `&name=${encodeURIComponent(name)}` : ''}` : '';
+    return `/verify-otp${q}`;
+  }
+  if (stage === 'profile_setup') {
+    return '/setup';
+  }
+  return '/dash';
+}
 
 function getApiBase(): string {
   const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
@@ -230,12 +311,45 @@ export interface LoginPayload {
 
 export interface AuthResponse {
   accessToken: string;
+  ok?: boolean;
+  stage?: string;
+  message?: string;
+  email?: string;
+  user?: {
+    id: string;
+    email: string;
+    name?: string;
+    onboardingStage?: string;
+    isEmailVerified?: boolean;
+    profileImage?: string;
+  };
+}
+
+export interface VerifyOtpPayload {
+  email: string;
+  otp: string;
 }
 
 export const authApi = {
-  /** Register a new user */
+  /** Register a new user and trigger OTP email */
   register: async (payload: RegisterPayload): Promise<AuthResponse> => {
     const data = await api<AuthResponse>('/auth/register', {
+      method: 'POST',
+      json: payload,
+      skipAuth: true,
+    });
+    if (payload.name) authStateStorage.setLastName(payload.name);
+    if (payload.email) authStateStorage.setLastEmail(payload.email);
+    authStateStorage.setStage('otp_pending');
+    if (data?.accessToken && data?.stage !== 'otp_pending') {
+      tokenStorage.set(data.accessToken);
+    }
+    return data;
+  },
+
+  /** Verify OTP code sent to user email */
+  verifyOtp: async (payload: VerifyOtpPayload): Promise<AuthResponse> => {
+    const data = await api<AuthResponse>('/auth/verify-otp', {
       method: 'POST',
       json: payload,
       skipAuth: true,
@@ -243,7 +357,60 @@ export const authApi = {
     if (data?.accessToken) {
       tokenStorage.set(data.accessToken);
     }
+    if (data?.user) {
+      authStateStorage.saveSession(data.user);
+    } else {
+      authStateStorage.setStage('profile_setup');
+    }
     return data;
+  },
+
+  /** Resend verification OTP code */
+  resendOtp: async (email: string): Promise<{ ok: boolean; message: string }> => {
+    return api<{ ok: boolean; message: string }>('/auth/resend-otp', {
+      method: 'POST',
+      json: { email },
+      skipAuth: true,
+    });
+  },
+
+  /** Request password reset email */
+  forgotPassword: async (email: string): Promise<{ ok: boolean; message: string }> => {
+    return api<{ ok: boolean; message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      json: { email },
+      skipAuth: true,
+    });
+  },
+
+  /** Submit OTP and new password */
+  resetPassword: async (email: string, otp: string, newPassword?: string): Promise<{ ok: boolean; message: string }> => {
+    return api<{ ok: boolean; message: string }>('/auth/reset-password', {
+      method: 'POST',
+      json: { email, otp, newPassword },
+      skipAuth: true,
+    });
+  },
+
+  /** Get authenticated user profile & onboarding stage */
+  getMe: async (): Promise<{
+    id: string;
+    email: string;
+    name?: string;
+    isEmailVerified?: boolean;
+    onboardingStage?: string;
+    profileImage?: string;
+  }> => {
+    return api('/auth/me');
+  },
+
+  /** Update current onboarding stage */
+  updateOnboardingStage: async (stage: 'otp_pending' | 'profile_setup' | 'completed'): Promise<{ ok: boolean; stage: string }> => {
+    authStateStorage.setStage(stage);
+    return api('/auth/onboarding-stage', {
+      method: 'PUT',
+      json: { stage },
+    });
   },
 
   /** Login existing user */
@@ -255,6 +422,25 @@ export const authApi = {
     });
     if (data?.accessToken) {
       tokenStorage.set(data.accessToken);
+    }
+    if (data?.user) {
+      authStateStorage.saveSession(data.user);
+    }
+    return data;
+  },
+
+  /** Google OAuth authentication (creates or logs in user, verifies email, issues JWT) */
+  googleLogin: async (payload: { email: string; name?: string; avatarUrl?: string }): Promise<AuthResponse> => {
+    const data = await api<AuthResponse>('/auth/google', {
+      method: 'POST',
+      json: payload,
+      skipAuth: true,
+    });
+    if (data?.accessToken) {
+      tokenStorage.set(data.accessToken);
+    }
+    if (data?.user) {
+      authStateStorage.saveSession(data.user);
     }
     return data;
   },
@@ -317,15 +503,16 @@ export const profileApi = {
     return api('/profile/cv', {
       method: 'POST',
       body: formData,
+      skipAuth: !tokenStorage.hasToken(),
     });
   },
 
-  /** Mark a parsed profile field as verified */
-  verify: async (fieldKey: string): Promise<any> => {
-    return api('/profile/verify', {
-      method: 'POST',
-      json: { key: fieldKey },
-    });
+  /**
+   * Mark the profile verified. The server checks required fields and, on a 422, returns
+   * `details.missing` (labels of what's still empty).
+   */
+  verify: async (): Promise<{ status: 'verified'; queuedDrafts: number }> => {
+    return api('/profile/verify', { method: 'POST' });
   },
 
   /** Add a monitored company career page */
@@ -369,6 +556,18 @@ export const jobsApi = {
       method: 'POST',
       json: payload,
     });
+  },
+
+  /**
+   * Apply to one or many links. Each is saved as a job (JS pages rendered), tailored, and applied
+   * to in the JAVI browser, following the profile's approval rules.
+   */
+  addLinks: async (urls: string[]): Promise<{
+    count: number;
+    queued: number;
+    results: Array<{ url: string; status: 'queued' | 'already_added' | 'failed'; title?: string; company?: string; error?: string }>;
+  }> => {
+    return api('/jobs/links', { method: 'POST', json: { urls } });
   },
 
   /** Import jobs via URL or file (PDF, CSV, XLSX, text) */
@@ -563,66 +762,101 @@ export const gmailApi = {
 };
 
 // -----------------------------------------------------------------------------
-// 9. Business Mode API
+// 9. Business Mode API (leads from OpenStreetMap / CSV / manual, audit, quote, pitch)
 // -----------------------------------------------------------------------------
-export interface BusinessSearchParams {
-  query: string;
-  location?: string;
-  lat?: number;
-  lng?: number;
-  radiusKm?: number;
+export type LeadStatus = 'new' | 'contacted' | 'replied' | 'call_booked' | 'won' | 'lost';
+export type Vertical = 'restaurant' | 'salon' | 'clinic' | 'shop' | 'school' | 'real_estate' | 'other';
+export type TierId = 'good' | 'better' | 'best';
+
+export interface LeadContact { kind: string; value: string; name?: string; isBusinessLine?: boolean }
+export interface AuditFinding { id: string; title: string; evidence: string; howToCheck: string; severity: 'high' | 'medium' | 'low'; offer?: string }
+export interface QuoteTier { tier: TierId; setup: number; monthly: number; includes: string[]; recommended?: boolean }
+export interface LeadQuote {
+  offer: string;
+  tiers: QuoteTier[];
+  floor: { setup: number; monthly: number };
+  cost: { setup: number; monthly: number };
+  monthlyValue?: number;
+  warnings: string[];
+  paymentOptions: Array<{ id: string; label: string; detail: string }>;
+}
+export interface LeadPitch { id: string; variant: 'observation' | 'question' | 'proof'; channel: 'email' | 'whatsapp'; subject?: string; body: string; waLink?: string; polished?: boolean; createdAt: string }
+export interface BusinessLead {
+  _id: string;
+  status: LeadStatus;
+  source: 'osm' | 'csv' | 'manual' | 'referral';
+  osmId?: string;
+  referredBy?: string;
+  name: string;
+  vertical: Vertical;
+  category?: string;
+  area?: string;
+  address?: string;
+  location?: { lat: number; lng: number };
+  website?: string;
+  openingHours?: string;
+  contacts: LeadContact[];
+  consent?: { given: boolean; at?: string; channel?: string; note?: string };
+  valueInputs: Record<string, number>;
+  audit?: { ranAt: string; url?: string; reachable?: boolean; findings: AuditFinding[]; error?: string };
+  quote?: LeadQuote;
+  pitches: LeadPitch[];
+  notes: Array<{ text: string; at: string }>;
+  lostReason?: string;
+  deal?: { offer: string; tier: TierId; setup: number; monthly: number; startedAt: string };
+  updatedAt?: string;
+}
+export interface ValueEstimate { monthly: number; parts: Array<{ label: string; monthly: number; formula: string }>; assumptions: string[]; sentence: string; missing: string[] }
+export interface CatalogVertical {
+  id: Vertical;
+  label: string;
+  primaryOffer: string;
+  primaryLabel: string;
+  valueInputs: Array<{ id: string; label: string; unit: string; default?: number; ownerNumber: boolean }>;
+}
+export interface BusinessServicesProfile {
+  brandName?: string;
+  city?: string;
+  publicPhone?: string;
+  publicEmail?: string;
+  physicalAddress?: string;
+  hourlyRate: number;
+  fxRate: number;
+  marginPct: number;
+  monthlyIncomeTarget?: number;
+  guarantees: { ownership: boolean; liveByDays?: number };
+  capacityPerMonth?: number | null;
+  caseStudies: Array<{ name: string; vertical?: string; offer?: string; result: string; url?: string; permissionToShare: boolean }>;
 }
 
 export const businessApi = {
-  /** Search businesses near location, scan presence, and qualify needs */
-  search: async (params: BusinessSearchParams): Promise<any> => {
-    return api('/business/search', {
-      method: 'POST',
-      json: params,
-    });
-  },
+  catalog: (): Promise<{ verticals: CatalogVertical[]; offers: Array<{ id: string; label: string; fixes: string }> }> => api('/business/catalog'),
+  getServices: (): Promise<BusinessServicesProfile> => api('/business/services'),
+  saveServices: (body: Partial<BusinessServicesProfile>): Promise<BusinessServicesProfile> => api('/business/services', { method: 'PUT', json: body }),
 
-  /** List qualified business leads */
-  list: async (stage?: string): Promise<any> => {
-    return api('/business/leads', {
-      params: stage ? { stage } : undefined,
-    });
+  /** OpenStreetMap search by business type and area. Public servers can take up to a minute or two. */
+  search: (vertical: Vertical, area: string, radiusM?: number): Promise<{ added: number; cached: boolean; leads: BusinessLead[]; center: { lat: number; lng: number; label: string }; attribution: string }> =>
+    api('/business/leads/search', { method: 'POST', json: { vertical, area, radiusM } }),
+  importLeads: (file: File): Promise<{ created: number; skipped: string[] }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api('/business/leads/import', { method: 'POST', body: fd });
   },
-
-  /** Get single business lead dossier */
-  getLead: async (id: string): Promise<any> => {
-    return api(`/business/leads/${id}`, {
-      method: 'GET',
-    });
-  },
-
-  /** Generate or re-synthesize tailored value pitch */
-  generatePitch: async (id: string): Promise<any> => {
-    return api(`/business/leads/${id}/pitch`, {
-      method: 'POST',
-    });
-  },
-
-  /** Launch multi-channel outreach sequence */
-  startSequence: async (id: string): Promise<any> => {
-    return api(`/business/leads/${id}/sequence/start`, {
-      method: 'POST',
-    });
-  },
-
-  /** Pause active outreach sequence */
-  pauseSequence: async (id: string): Promise<any> => {
-    return api(`/business/leads/${id}/sequence/pause`, {
-      method: 'POST',
-    });
-  },
-
-  /** Dismiss business lead */
-  dismiss: async (id: string): Promise<any> => {
-    return api(`/business/leads/${id}/dismiss`, {
-      method: 'POST',
-    });
-  },
+  add: (body: { name: string; vertical: Vertical; area?: string; website?: string; contacts?: LeadContact[]; referredBy?: string; consent?: { given: boolean; channel?: string; note?: string } }): Promise<BusinessLead> =>
+    api('/business/leads', { method: 'POST', json: body }),
+  list: (filter?: { status?: LeadStatus; vertical?: Vertical }): Promise<{ leads: BusinessLead[] }> => api('/business/leads', { params: filter }),
+  get: (id: string): Promise<{ lead: BusinessLead; value: ValueEstimate | null }> => api(`/business/leads/${id}`),
+  patch: (id: string, body: { valueInputs?: Record<string, number>; note?: string; consent?: { given: boolean; channel?: string; note?: string }; contacts?: LeadContact[]; vertical?: Vertical; website?: string }): Promise<{ lead: BusinessLead; value: ValueEstimate | null }> =>
+    api(`/business/leads/${id}`, { method: 'PATCH', json: body }),
+  remove: (id: string): Promise<void> => api(`/business/leads/${id}`, { method: 'DELETE' }),
+  audit: (id: string): Promise<BusinessLead> => api(`/business/leads/${id}/audit`, { method: 'POST' }),
+  quote: (id: string, offer?: string): Promise<{ lead: BusinessLead; value: ValueEstimate | null }> => api(`/business/leads/${id}/quote`, { method: 'POST', json: { offer } }),
+  pitch: (id: string, variant: LeadPitch['variant'], channel: LeadPitch['channel'], polish = false): Promise<{ lead: BusinessLead; pitch: LeadPitch }> =>
+    api(`/business/leads/${id}/pitch`, { method: 'POST', json: { variant, channel, polish } }),
+  scripts: (id: string): Promise<{ call: string[]; walkIn: string[]; objections: Array<{ objection: string; answer: string }>; takeaway: string; capacityNote?: string }> =>
+    api(`/business/leads/${id}/scripts`),
+  move: (id: string, to: LeadStatus, extra: { note?: string; lostReason?: string; deal?: { tier: TierId; setup?: number; monthly?: number } } = {}): Promise<BusinessLead> =>
+    api(`/business/leads/${id}/status`, { method: 'POST', json: { to, ...extra } }),
 };
 
 // -----------------------------------------------------------------------------
@@ -659,10 +893,110 @@ export const testApi = {
   },
 };
 
+// -----------------------------------------------------------------------------
+// 10b. Reply links (public): the page a WhatsApp "Answer here" link opens
+// -----------------------------------------------------------------------------
+export interface PublicTask {
+  id: string;
+  reason: string;
+  message: string;
+  status: 'open' | 'answered' | 'done' | 'dismissed';
+  live: boolean;
+  questions: Array<{ key: string; label: string; type: string; options?: string[]; required: boolean; suggested?: string; isSalary?: boolean }>;
+  jobTitle?: string;
+  company?: string;
+  openUrl?: string;
+}
+
+export const replyApi = {
+  get: (token: string): Promise<PublicTask> => api(`/reply/${encodeURIComponent(token)}`, { skipAuth: true }),
+  send: (token: string, action: 'answer' | 'continue' | 'submitted', answers?: Record<string, string>): Promise<PublicTask> =>
+    api(`/reply/${encodeURIComponent(token)}`, { method: 'POST', json: { action, answers }, skipAuth: true }),
+};
+
+// -----------------------------------------------------------------------------
+// 11. Taxonomy API (Dynamic Roles, Industries, Skills & Locations)
+// -----------------------------------------------------------------------------
+export const taxonomyApi = {
+  getRoles: async (query?: string, category?: string): Promise<{ roles: any[]; count: number }> => {
+    const params = new URLSearchParams();
+    if (query) params.set('query', query);
+    if (category) params.set('category', category);
+    const qs = params.toString();
+    return api(`/taxonomy/roles${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getIndustries: async (query?: string): Promise<{ industries: any[]; count: number }> => {
+    const params = new URLSearchParams();
+    if (query) params.set('query', query);
+    const qs = params.toString();
+    return api(`/taxonomy/industries${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getLocations: async (region?: string, query?: string): Promise<{ locations: any[]; count: number }> => {
+    const params = new URLSearchParams();
+    if (region) params.set('region', region);
+    if (query) params.set('query', query);
+    const qs = params.toString();
+    return api(`/taxonomy/locations${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getSkills: async (headline?: string, role?: string, query?: string): Promise<{
+    headline: string;
+    targetRole: string;
+    skills: string[];
+    suggestedHeadlines: string[];
+  }> => {
+    const params = new URLSearchParams();
+    if (headline) params.set('headline', headline);
+    if (role) params.set('role', role);
+    if (query) params.set('query', query);
+    const qs = params.toString();
+    return api(`/taxonomy/skills${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  /** Several target roles at once; suggestions are merged across them. */
+  getSkillsForRoles: async (roles: string[], headline?: string): Promise<{
+    targetRoles: string[];
+    skills: string[];
+    suggestedHeadlines: string[];
+  }> => {
+    return api('/taxonomy/skills', { method: 'GET', params: { roles: roles.join(','), headline } });
+  },
+
+  /** Searchable skill catalog (name or alias), max 50 results. */
+  getSkillCatalog: async (query?: string, category?: string): Promise<{
+    skills: Array<{ id: string; name: string; category: string; aliases: string[] }>;
+    categories: string[];
+    count: number;
+  }> => {
+    return api('/taxonomy/skills/catalog', { method: 'GET', params: { query, category } });
+  },
+
+  /** Job fields: role categories with their roles, plus industries. */
+  getFields: async (): Promise<{
+    fields: Array<{ category: string; roles: Array<{ id: string; name: string; slug: string }> }>;
+    industries: Array<{ id: string; name: string; slug: string; description: string }>;
+  }> => {
+    return api('/taxonomy/fields', { method: 'GET' });
+  },
+
+  requestOption: async (payload: {
+    role_name?: string;
+    industry_name?: string;
+    skill_name?: string;
+    context?: string;
+    email?: string;
+  }): Promise<{ success: boolean; message: string; item: any }> => {
+    return api('/taxonomy/request', { method: 'POST', json: payload });
+  },
+};
+
 // Export unified client object as default and named export
 export const javiApi = {
   auth: authApi,
   profile: profileApi,
+  taxonomy: taxonomyApi,
   jobs: jobsApi,
   applications: applicationsApi,
   tasks: tasksApi,

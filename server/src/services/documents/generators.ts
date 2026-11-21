@@ -128,7 +128,7 @@ async function writeProposal(p: IProfile, j: IJobPost, feedback?: string[]) {
 }
 
 /** Runs a generator, fact-checks the result, and regenerates once with the problems listed. */
-async function guarded<T>(gen: (feedback?: string[]) => Promise<T>, texts: (t: T) => (string | undefined)[], vocab: FactVocab) {
+export async function guarded<T>(gen: (feedback?: string[]) => Promise<T>, texts: (t: T) => (string | undefined)[], vocab: FactVocab) {
   let value = await gen();
   let check = checkFacts(texts(value), vocab);
   if (!check.passed) {

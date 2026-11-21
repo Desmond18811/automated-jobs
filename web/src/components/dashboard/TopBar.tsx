@@ -1,14 +1,15 @@
 import { useState, useEffect, type FC } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { SignedIn, UserButton } from '@clerk/clerk-react';
-import { JaviGlyph } from '@/assets/logos';
+import { Show, UserButton } from '@clerk/react';
+import { JaviBrandMark } from '@/assets/logos';
 import { BellIcon, UsFlagIcon } from '@/assets/icons';
-import { AVATAR_ANGELICA } from '@/assets/avatars';
+import { AVATAR_ADA } from '@/assets/avatars';
 import { useUserProfile } from '@/context/ProfileContext';
 import { notificationsApi } from '@/api';
 import { useSocket } from '@/hooks/useSocket';
 import { NotificationPopup } from './NotificationPopup';
 import type { DashboardTab } from './Sidebar';
+import { useIsMobile } from '@/hooks/useStageScale';
 
 interface TopBarProps {
   onOpenSettings?: () => void;
@@ -17,6 +18,7 @@ interface TopBarProps {
 
 export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const { profile } = useUserProfile();
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -49,11 +51,11 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
         gridColumn: '1 / -1',
         display: 'flex',
         alignItems: 'center',
-        gap: 18,
-        padding: '0 20px',
+        gap: isMobile ? 12 : 18,
+        padding: isMobile ? '0 16px' : '0 20px',
         borderBottom: '1px solid #f0f0f3',
         background: '#fff',
-        height: 60,
+        height: isMobile ? 54 : 60,
         boxSizing: 'border-box',
         zIndex: 50,
         position: 'relative',
@@ -62,54 +64,54 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
       <Link
         to="/"
         style={{
-          width: 150,
+          width: isMobile ? 'auto' : 150,
           display: 'flex',
           alignItems: 'center',
-          gap: 7,
-          fontWeight: 700,
-          fontSize: 17,
-          letterSpacing: '-.4px',
-          color: '#0b0b0c',
+          textDecoration: 'none',
         }}
       >
-        <JaviGlyph size={16} />
-        Javi
+        <JaviBrandMark />
       </Link>
-      <div
-        style={{
-          width: 340,
-          height: 36,
-          background: '#f6f7f9',
-          borderRadius: 10,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 4px 0 12px',
-          boxSizing: 'border-box',
-        }}
-      >
-        <span style={{ fontSize: 11.5, color: '#9a9aa3' }}>Search roles, companies, leads…</span>
-        <span
+
+      {!isMobile && (
+        <div
           style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: '#3a3a40',
-            background: '#fff',
-            borderRadius: 7,
-            padding: '6px 10px',
-            boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-            cursor: 'pointer',
+            width: 340,
+            height: 36,
+            background: '#f6f7f9',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 4px 0 12px',
+            boxSizing: 'border-box',
           }}
         >
-          Jobs ▾
-        </span>
-      </div>
-
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Language selection">
-          <UsFlagIcon size={18} />
-          <span style={{ fontSize: 11.5, fontWeight: 500, color: '#3a3a40' }}>Eng (US) ▾</span>
+          <span style={{ fontSize: 11.5, color: '#9a9aa3' }}>Search roles, companies, leads…</span>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#3a3a40',
+              background: '#fff',
+              borderRadius: 7,
+              padding: '6px 10px',
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+              cursor: 'pointer',
+            }}
+          >
+            Jobs ▾
+          </span>
         </div>
+      )}
+
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 16 }}>
+        {!isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Language selection">
+            <UsFlagIcon size={18} />
+            <span style={{ fontSize: 11.5, fontWeight: 500, color: '#3a3a40' }}>Eng (US) ▾</span>
+          </div>
+        )}
 
         {/* Bell Icon & Notification Popup */}
         <div style={{ position: 'relative' }}>
@@ -157,11 +159,11 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
           />
         </div>
 
-        <SignedIn>
+        <Show when="signed-in">
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <UserButton />
           </div>
-        </SignedIn>
+        </Show>
 
         <div
           onClick={() => (onSelectTab ? onSelectTab('cv_profile') : onOpenSettings ? onOpenSettings() : nav('/setup'))}
@@ -169,11 +171,11 @@ export const TopBar: FC<TopBarProps> = ({ onOpenSettings, onSelectTab }) => {
           title="Account profile"
         >
           <img
-            src={profile.avatarUrl || AVATAR_ANGELICA}
-            alt={profile.fullName || 'Angelica'}
+            src={profile.avatarUrl || AVATAR_ADA}
+            alt={profile.fullName || 'Amaka'}
             style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }}
           />
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Angelica'} ▾</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{profile.firstName || 'Amaka'} ▾</span>
         </div>
       </div>
     </div>

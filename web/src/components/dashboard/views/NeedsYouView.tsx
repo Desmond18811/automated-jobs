@@ -19,6 +19,9 @@ interface Task {
   payload?: {
     company?: string;
     role?: string;
+    jobTitle?: string;
+    openUrl?: string;
+    live?: boolean;
     url?: string;
     pageUrl?: string;
     [key: string]: any;
@@ -250,8 +253,9 @@ export const NeedsYouView: FC = () => {
             const taskId = task._id || task.id || '';
             const isSubmitting = Boolean(submitting[taskId]);
             const companyName = task.payload?.company || 'Target Company';
-            const roleName = task.payload?.role || 'Job Application';
-            const url = task.payload?.url || task.payload?.pageUrl;
+            // The server sends jobTitle/openUrl; role/url/pageUrl are kept for older tasks.
+            const roleName = task.payload?.jobTitle || task.payload?.role || 'Job Application';
+            const url = task.payload?.openUrl || task.payload?.url || task.payload?.pageUrl;
 
             // Reason metadata badge
             let badgeText = 'Answer needed';

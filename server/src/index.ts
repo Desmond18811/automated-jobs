@@ -42,6 +42,11 @@ if (process.env.NODE_ENV !== 'test') {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.once('SIGUSR2', async () => {
+    logger.info('Nodemon restart signal received, releasing port...');
+    await stopServer();
+    process.kill(process.pid, 'SIGUSR2');
+  });
 }
 
 export * from './models';

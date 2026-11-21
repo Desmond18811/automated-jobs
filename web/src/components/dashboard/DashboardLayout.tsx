@@ -15,6 +15,14 @@ import { SettingsView } from './views/SettingsView';
 import { useUserProfile } from '@/context/ProfileContext';
 import { useSocket } from '@/hooks/useSocket';
 import { applicationsApi, tasksApi } from '@/api';
+import { useIsMobile } from '@/hooks/useStageScale';
+import {
+  BriefcaseIcon,
+  RepeatIcon,
+  TargetIcon,
+  UserIcon,
+  ZapIcon,
+} from '@/assets/icons';
 
 export const DashboardLayout: FC = () => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
@@ -22,6 +30,7 @@ export const DashboardLayout: FC = () => {
   const [liveToast, setLiveToast] = useState<string | null>(null);
   const [needsYouCount, setNeedsYouCount] = useState(0);
   const [draftsCount, setDraftsCount] = useState(0);
+  const isMobile = useIsMobile();
   const { profile } = useUserProfile();
 
   const refreshCounts = () => {
@@ -70,31 +79,44 @@ export const DashboardLayout: FC = () => {
     day: 'numeric',
   }).format(new Date());
 
+  const MOBILE_TABS: { key: DashboardTab; label: string; icon: any; badge?: number }[] = [
+    { key: 'dashboard', label: 'Overview', icon: TargetIcon },
+    { key: 'needs_you', label: 'Needs you', icon: ZapIcon, badge: needsYouCount > 0 ? needsYouCount : undefined },
+    { key: 'job_feed', label: 'Feed', icon: BriefcaseIcon },
+    { key: 'tracker', label: 'Tracker', icon: RepeatIcon },
+    { key: 'cv_profile', label: 'Profile', icon: UserIcon },
+  ];
+
   return (
     <div
       data-screen-label="Dashboard"
       style={{
-        position: 'absolute',
-        inset: 0,
+        position: isMobile ? 'relative' : 'absolute',
+        inset: isMobile ? undefined : 0,
+        width: '100%',
+        minHeight: '100vh',
         display: 'grid',
-        gridTemplateColumns: '190px minmax(0, 1fr)',
-        gridTemplateRows: '60px minmax(0, 1fr)',
+        gridTemplateColumns: isMobile ? '1fr' : '190px minmax(0, 1fr)',
+        gridTemplateRows: isMobile ? '54px minmax(0, 1fr)' : '60px minmax(0, 1fr)',
         background: '#fff',
         overflow: 'hidden',
       }}
     >
       <TopBar onOpenSettings={() => setActiveTab('settings')} onSelectTab={setActiveTab} />
-      <Sidebar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        needsYouCount={needsYouCount}
-        draftsCount={draftsCount}
-      />
+      
+      {!isMobile && (
+        <Sidebar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          needsYouCount={needsYouCount}
+          draftsCount={draftsCount}
+        />
+      )}
 
       <main
         style={{
           position: 'relative',
-          padding: '20px 24px',
+          padding: isMobile ? '16px 14px 76px' : '20px 24px',
           display: 'flex',
           flexDirection: 'column',
           gap: 16,
@@ -112,8 +134,9 @@ export const DashboardLayout: FC = () => {
           <div
             style={{
               position: 'fixed',
-              top: 72,
-              right: 24,
+              top: isMobile ? 62 : 72,
+              right: isMobile ? 14 : 24,
+              left: isMobile ? 14 : undefined,
               background: '#0b0b0c',
               color: '#fff',
               padding: '10px 16px',
@@ -128,18 +151,19 @@ export const DashboardLayout: FC = () => {
               animation: 'jj-fade-in 0.3s ease',
             }}
           >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-            {liveToast}
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{liveToast}</span>
           </div>
         )}
+
         {activeTab === 'dashboard' && (
           <>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'center' : 'flex-end', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <span style={{ fontSize: 11, color: '#8a8a92' }}>{todayStr}</span>
-                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-.5px' }}>
-                  Good morning, {profile.firstName || 'Candidate'}
+                <h1 style={{ margin: 0, fontSize: isMobile ? 19 : 22, fontWeight: 700, letterSpacing: '-.5px' }}>
+                  Good morning, {profile.firstName || 'Amaka'}
                 </h1>
               </div>
               <button
@@ -187,7 +211,7 @@ export const DashboardLayout: FC = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) 340px',
+                gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 340px',
                 gap: 20,
                 alignItems: 'start',
               }}
@@ -197,14 +221,14 @@ export const DashboardLayout: FC = () => {
                 <StatCards />
 
                 {/* 2-Column Section: Needs you & Javi today */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
                   <NeedsYouCard onOpenQueue={() => setActiveTab('needs_you')} />
                   <JaviTodayCard />
                 </div>
               </div>
 
               {/* Right Column: Live Candidate Profile Segment (Matching Reference Design) */}
-              <div style={{ width: 340, flexShrink: 0 }}>
+              <div style={{ width: isMobile ? '100%' : 340, flexShrink: 0 }}>
                 <ProfileDrawerCard onEditProfile={() => setActiveTab('cv_profile')} />
               </div>
             </div>
@@ -219,6 +243,80 @@ export const DashboardLayout: FC = () => {
         {activeTab === 'business_mode' && <BusinessModeView />}
         {activeTab === 'settings' && <SettingsView />}
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      {isMobile && (
+        <nav
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 58,
+            background: 'rgba(255,255,255,0.96)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            borderTop: '1px solid #e6e6ea',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-around',
+            padding: '0 6px',
+            zIndex: 100,
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.04)',
+          }}
+        >
+          {MOBILE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                  background: 'transparent',
+                  border: 0,
+                  cursor: 'pointer',
+                  padding: '6px 10px',
+                  color: isActive ? '#2563eb' : '#71717a',
+                  position: 'relative',
+                  fontFamily: 'Montserrat, sans-serif',
+                }}
+              >
+                <span style={{ position: 'relative', display: 'flex' }}>
+                  <Icon size={18} color={isActive ? '#2563eb' : '#71717a'} />
+                  {tab.badge !== undefined && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -8,
+                        background: '#ef4444',
+                        color: '#fff',
+                        fontSize: 9,
+                        fontWeight: 700,
+                        borderRadius: 999,
+                        padding: '1px 4px',
+                        minWidth: 14,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500 }}>
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 };

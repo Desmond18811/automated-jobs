@@ -9,6 +9,9 @@ import { Notification } from '../models/notification.model';
 import { BusinessLead } from '../models/businessLead.model';
 import { RefreshToken } from '../models/refreshToken.model';
 import { AuditLog } from '../models/audit.model';
+import { TaxonomyRequest } from '../models/taxonomyRequest.model';
+import { SiteAccount } from '../models/siteAccount.model';
+import { BusinessServices } from '../models/businessServices.model';
 import { logger } from './logger';
 
 let isMemoryDbActive = false;
@@ -31,233 +34,172 @@ export function activateMemoryDb(): void {
   const memoryBusinessLeads: any[] = [];
   const memoryTokens: any[] = [];
 
-  // Seed default demo user and profile
-  const defaultUserId = new Types.ObjectId();
+  // Pre-seed comprehensive demo users
   const passwordHash = bcrypt.hashSync('Password123!', 10);
+  const passwordHashSimple = bcrypt.hashSync('password123', 10);
 
-  const defaultUser = {
-    _id: defaultUserId,
-    id: String(defaultUserId),
-    email: 'candidate@javi.ai',
-    passwordHash,
-    role: 'candidate',
-    status: 'active',
-    toObject() {
-      return { ...this };
-    },
-  };
-  memoryUsers.push(defaultUser);
-
-  // Pre-seed test user as well
-  const testUserId = new Types.ObjectId();
-  memoryUsers.push({
-    _id: testUserId,
-    id: String(testUserId),
-    email: 'test@javi.ai',
-    passwordHash,
-    role: 'candidate',
-    status: 'active',
-    toObject() {
-      return { ...this };
-    },
-  });
-
-  const defaultProfile = {
-    _id: new Types.ObjectId(),
-    userId: defaultUserId,
-    status: 'complete',
-    firstName: 'Angelica',
-    lastName: 'Greeze',
-    fullName: 'Angelica Greeze',
-    email: 'candidate@javi.ai',
-    phone: '+1 (555) 234-5678',
-    headline: 'UI / UX Designer',
-    location: 'New York, NY (Open to Remote / Relocation)',
-    careerPages: [
-      {
-        url: 'https://stripe.com/jobs',
-        companyName: 'Stripe',
-        frequency: 'daily',
-        lastCheckedAt: new Date(),
-        status: 'active',
-      },
-      {
-        url: 'https://paystack.com/careers',
-        companyName: 'Paystack',
-        frequency: 'daily',
-        lastCheckedAt: new Date(),
-        status: 'active',
-      },
-    ],
-    rules: { dailySendCap: 15, approvalMode: 'review' },
-    targetRoles: ['UI / UX Designer', 'UI Designer', 'Product Designer'],
-    primarySkills: ['UI', 'Ux', 'Website Design', 'Mobile Design', 'Research', 'Interaction'],
-    secondarySkills: ['Figma', 'Prototyping', 'Design Systems', 'User Testing'],
-    toolsAndFrameworks: ['Figma', 'Adobe XD', 'Sketch', 'Principle', 'HTML/CSS'],
-    experience: [
-      {
-        title: 'UI / UX Designer',
-        company: 'Ideologist Team',
-        location: 'Remote',
-        start: 'Jan 2022',
-        end: 'Present',
-        current: true,
-        highlights: ['Leading UX research, interaction architecture, and scalable design systems.'],
-      },
-      {
-        title: 'UI Designer',
-        company: 'Tigabatang',
-        location: 'Fulltime',
-        start: 'Jan 2022',
-        end: 'Present',
-        current: false,
-        highlights: ['Designed high-fidelity interactive prototypes and design documentation.'],
-      },
-    ],
-    education: [
-      {
-        institution: 'Oxford University',
-        degree: 'Student - Software Engienering',
-        start: '2018',
-        end: '2021',
-      },
-      {
-        institution: 'Oxford Vocational High School',
-        degree: 'Student - Software Engienering',
-        start: '2015',
-        end: '2015',
-      },
-    ],
-    projects: [
-      {
-        name: 'AutoApply Core Engine',
-        description: 'Multi-channel outbound job dispatcher with AI verification.',
-        url: 'https://github.com/alex/autoapply',
-      },
-    ],
-    set(keyOrObj: any, val?: any) {
-      if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
-      else (this as any)[keyOrObj] = val;
-    },
-    toObject() {
-      return { ...this };
-    },
-    save() {
-      return Promise.resolve(this);
-    },
-  };
-  memoryProfiles.push(defaultProfile);
-
-  // Pre-seed sample business leads located at candidate location (Lekki / Lagos)
-  const sampleLeads = [
+  const demoSeeds = [
     {
-      _id: new Types.ObjectId(),
-      name: 'Apex Pay Technologies',
-      category: 'Fintech & Digital Payments',
-      address: 'Admiralty Way, Lekki Phase 1, Lagos',
-      location: { lat: 6.4474, lng: 3.4723 },
-      distanceKm: 1.2,
-      rating: 4.8,
-      reviewsCount: 34,
-      websiteUrl: 'https://apexpay.example.com',
-      websiteAudit: {
-        hasWebsite: true,
-        mobileResponsive: false,
-        hasSsl: true,
-        techStack: ['WordPress', 'PHP', 'jQuery'],
-        issues: ['Mobile viewport scaling error', 'Slow API checkout latency (>1.8s)'],
-      },
-      socialPresence: {
-        linkedinUrl: 'https://linkedin.com/company/apex-pay-demo',
-        twitterUrl: 'https://twitter.com/apexpay_demo',
-        notes: ['Active hiring for backend integrations'],
-      },
-      contacts: [
-        {
-          name: 'Tunde Adeleke',
-          title: 'Head of Engineering',
-          email: 'tunde@apexpay.example.com',
-          phone: '+234 803 111 2233',
-        },
-      ],
-      needsServices: true,
-      qualificationReason: 'High checkout latency and broken mobile responsive flow on payment gateway',
-      pitchSnippet:
-        'I noticed Apex Pay’s checkout flow has a 1.8s mobile delay. I specialize in high-concurrency TypeScript/Node services and can optimize the intake flow to cut bounce rates by ~25%.',
-      stage: 'pitch_drafted',
+      id: new Types.ObjectId(),
+      email: 'amaka.okafor@example.com',
+      firstName: 'Amaka',
+      lastName: 'Okafor',
+      headline: 'Senior Product Designer',
+      location: 'Lagos, Nigeria (Open to Remote)',
+      phone: '+234 801 234 5678',
     },
     {
-      _id: new Types.ObjectId(),
-      name: 'Lekki Dental & Health Clinic',
-      category: 'Healthcare & Wellness',
-      address: 'Bisola Durosinmi Etti Drive, Lekki, Lagos',
-      location: { lat: 6.4512, lng: 3.481 },
-      distanceKm: 2.1,
-      rating: 4.6,
-      reviewsCount: 52,
-      websiteUrl: '',
-      websiteAudit: {
-        hasWebsite: false,
-        mobileResponsive: false,
-        hasSsl: false,
-        techStack: [],
-        issues: ['No online booking presence; manual phone reservations only'],
-      },
-      socialPresence: {
-        instagramUrl: 'https://instagram.com/lekkidental_demo',
-        notes: ['Instagram DM booking causes patient leakage'],
-      },
-      contacts: [
-        {
-          name: 'Dr. Chika Nwosu',
-          title: 'Medical Director & Founder',
-          email: 'chika@lekkidental.example.com',
-          phone: '+234 802 444 5566',
-        },
-      ],
-      needsServices: true,
-      qualificationReason: 'Zero automated online booking system; patient intake bottleneck',
-      pitchSnippet:
-        'I noticed patients currently have to DM on Instagram to book consultations. I can set up an automated WhatsApp + Web self-service appointment scheduler in 48 hours to recover lost bookings.',
-      stage: 'qualified',
+      id: new Types.ObjectId(),
+      email: 'you@example.com',
+      firstName: 'Ada',
+      lastName: 'Okafor',
+      headline: 'Senior Product Designer',
+      location: 'Lagos, Nigeria (Open to Remote)',
+      phone: '+234 801 234 5678',
     },
     {
-      _id: new Types.ObjectId(),
-      name: 'SwiftLogistics Express',
-      category: 'Supply Chain & Logistics',
-      address: 'Freedom Way, Lekki Phase 1, Lagos',
-      location: { lat: 6.442, lng: 3.468 },
-      distanceKm: 2.8,
-      rating: 4.3,
-      reviewsCount: 19,
-      websiteUrl: 'https://swiftlogistics.example.com',
-      websiteAudit: {
-        hasWebsite: true,
-        mobileResponsive: true,
-        hasSsl: true,
-        techStack: ['React', 'Node.js'],
-        issues: ['No real-time driver tracking WebSockets'],
-      },
-      socialPresence: {
-        linkedinUrl: 'https://linkedin.com/company/swiftlogistics-demo',
-        notes: ['Customer complaints regarding delayed parcel status updates'],
-      },
-      contacts: [
-        {
-          name: 'Femi Balogun',
-          title: 'Operations Director',
-          email: 'femi@swiftlogistics.example.com',
-        },
-      ],
-      needsServices: true,
-      qualificationReason: 'Missing real-time socket tracking; dispatch latency',
-      pitchSnippet:
-        'I noticed parcel updates are batch-refreshed with delays. I build real-time event-driven tracking layers (Socket.IO/Redis) and can deploy live driver GPS telemetry for your dispatch dashboard.',
-      stage: 'discovered',
+      id: new Types.ObjectId(),
+      email: 'candidate@javi.ai',
+      firstName: 'Angelica',
+      lastName: 'Greeze',
+      headline: 'UI / UX Designer',
+      location: 'New York, NY (Open to Remote / Relocation)',
+      phone: '+1 (555) 234-5678',
+    },
+    {
+      id: new Types.ObjectId(),
+      email: 'test@javi.ai',
+      firstName: 'Test',
+      lastName: 'Candidate',
+      headline: 'Lead Automation Engineer',
+      location: 'Lekki, Lagos',
+      phone: '+234 802 345 6789',
+    },
+    {
+      id: new Types.ObjectId(),
+      email: 'ada@example.com',
+      firstName: 'Ada',
+      lastName: 'Okafor',
+      headline: 'Senior Product Designer',
+      location: 'Lagos, Nigeria (Open to Remote)',
+      phone: '+234 801 234 5678',
+    },
+    {
+      id: new Types.ObjectId(),
+      email: 'ada.okafor@example.com',
+      firstName: 'Ada',
+      lastName: 'Okafor',
+      headline: 'Senior Product Designer',
+      location: 'Lagos, Nigeria (Open to Remote)',
+      phone: '+234 801 234 5678',
     },
   ];
 
-  sampleLeads.forEach((l) => memoryBusinessLeads.push(l));
+  const defaultUserId = demoSeeds[0].id; // amaka.okafor@example.com
+
+  for (const s of demoSeeds) {
+    memoryUsers.push({
+      _id: s.id,
+      id: String(s.id),
+      email: s.email,
+      passwordHash: passwordHashSimple,
+      role: 'candidate',
+      status: 'active',
+      isEmailVerified: true,
+      onboardingStage: 'completed',
+      name: `${s.firstName} ${s.lastName}`,
+      save() {
+        return Promise.resolve(this);
+      },
+      toObject() {
+        return { ...this };
+      },
+    });
+
+    const prof = {
+      _id: new Types.ObjectId(),
+      userId: s.id,
+      status: 'verified',
+      firstName: s.firstName,
+      lastName: s.lastName,
+      fullName: `${s.firstName} ${s.lastName}`,
+      email: s.email,
+      phone: s.phone,
+      headline: s.headline,
+      location: s.location,
+      careerPages: [
+        {
+          url: 'https://stripe.com/jobs',
+          companyName: 'Stripe',
+          frequency: 'daily',
+          lastCheckedAt: new Date(),
+          status: 'active',
+        },
+        {
+          url: 'https://paystack.com/careers',
+          companyName: 'Paystack',
+          frequency: 'daily',
+          lastCheckedAt: new Date(),
+          status: 'active',
+        },
+      ],
+      rules: { dailySendCap: 15, approvalMode: 'review' },
+      targetRoles: ['Senior Product Designer', 'UI / UX Designer', 'Product Designer'],
+      primarySkills: ['UI', 'UX', 'Website Design', 'Mobile Design', 'Research', 'Interaction', 'Figma'],
+      secondarySkills: ['Design Systems', 'Prototyping', 'User Testing', 'React'],
+      toolsAndFrameworks: ['Figma', 'Adobe XD', 'Sketch', 'Principle', 'HTML/CSS'],
+      experience: [
+        {
+          title: 'Senior Product Designer',
+          company: 'Ideologist Team',
+          location: 'Remote',
+          start: 'Jan 2022',
+          end: 'Present',
+          current: true,
+          bullets: [{ id: 'seed-2877', text: 'Leading UX research, interaction architecture, and scalable design systems.' }],
+        },
+        {
+          title: 'UI Designer',
+          company: 'Tigabatang',
+          location: 'Fulltime',
+          start: 'Jan 2020',
+          end: 'Dec 2021',
+          current: false,
+          bullets: [{ id: 'seed-4523', text: 'Designed high-fidelity interactive prototypes and design documentation.' }],
+        },
+      ],
+      education: [
+        {
+          institution: 'Oxford University',
+          degree: 'Student - Software Engineering',
+          start: '2018',
+          end: '2021',
+        },
+      ],
+      projects: [
+        {
+          name: 'AutoApply Core Engine',
+          description: 'Multi-channel outbound job dispatcher with AI verification.',
+          url: 'https://github.com/alex/autoapply',
+        },
+      ],
+      set(keyOrObj: any, val?: any) {
+        if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
+        else (this as any)[keyOrObj] = val;
+      },
+      toObject() {
+        return { ...this };
+      },
+      save() {
+        return Promise.resolve(this);
+      },
+    };
+    memoryProfiles.push(prof);
+  }
+
+
+  // Pre-seed sample business leads located at candidate location (Lekki / Lagos)
+  // No seeded business leads: Business Mode only shows real ones (OSM, CSV, manual).
 
   // Seed sample jobs
   const sampleJobs = [
@@ -294,114 +236,114 @@ export function activateMemoryDb(): void {
   ];
   sampleJobs.forEach((j) => memoryJobs.push(j));
 
-  // Seed sample applications
-  const sampleApplications = [
-    {
-      _id: new Types.ObjectId(),
-      id: 'app-1',
-      userId: defaultUserId,
-      jobId: sampleJobs[0]._id,
-      company: 'Stripe',
-      role: 'Senior Automation Engineer',
-      status: 'interviewed',
-      channel: 'career_page',
-      draftResume: 'Tailored resume emphasizing Playwright & automated delivery.',
-      draftCoverLetter: 'I have delivered distributed automation pipelines with 99.9% uptime...',
-      timeline: [
-        { stage: 'queued', date: new Date(Date.now() - 7 * 86400000) },
-        { stage: 'sent', date: new Date(Date.now() - 5 * 86400000) },
-        { stage: 'replied', date: new Date(Date.now() - 3 * 86400000) },
-        { stage: 'interviewed', date: new Date(Date.now() - 1 * 86400000) },
-      ],
-      createdAt: new Date(),
-    },
-    {
-      _id: new Types.ObjectId(),
-      id: 'app-2',
-      userId: defaultUserId,
-      jobId: sampleJobs[1]._id,
-      company: 'Paystack',
-      role: 'Staff Full-Stack Developer',
-      status: 'drafted',
-      channel: 'email',
-      draftResume: 'Tailored resume emphasizing React, Node.js, and high-volume fintech checkout.',
-      draftCoverLetter: 'Dear Paystack team, having scaled API architectures...',
-      timeline: [{ stage: 'queued', date: new Date(Date.now() - 2 * 86400000) }],
-      createdAt: new Date(),
-    },
-  ];
-  sampleApplications.forEach((a) => memoryApplications.push(a));
+  // Seed sample applications, tasks, and notifications for all demo seed users
+  for (const seedUser of demoSeeds) {
+    const sApps = [
+      {
+        _id: new Types.ObjectId(),
+        id: `app-1-${seedUser.email}`,
+        userId: seedUser.id,
+        jobId: sampleJobs[0]._id,
+        company: 'Stripe',
+        role: 'Senior Automation Engineer',
+        status: 'interviewed',
+        channel: 'career_page',
+        draftResume: 'Tailored resume emphasizing Playwright & automated delivery.',
+        draftCoverLetter: 'I have delivered distributed automation pipelines with 99.9% uptime...',
+        timeline: [
+          { stage: 'queued', date: new Date(Date.now() - 7 * 86400000) },
+          { stage: 'sent', date: new Date(Date.now() - 5 * 86400000) },
+          { stage: 'replied', date: new Date(Date.now() - 3 * 86400000) },
+          { stage: 'interviewed', date: new Date(Date.now() - 1 * 86400000) },
+        ],
+        createdAt: new Date(),
+      },
+      {
+        _id: new Types.ObjectId(),
+        id: `app-2-${seedUser.email}`,
+        userId: seedUser.id,
+        jobId: sampleJobs[1]._id,
+        company: 'Paystack',
+        role: 'Staff Full-Stack Developer',
+        status: 'drafted',
+        channel: 'email',
+        draftResume: 'Tailored resume emphasizing React, Node.js, and high-volume fintech checkout.',
+        draftCoverLetter: 'Dear Paystack team, having scaled API architectures...',
+        timeline: [{ stage: 'queued', date: new Date(Date.now() - 2 * 86400000) }],
+        createdAt: new Date(),
+      },
+    ];
+    sApps.forEach((a) => memoryApplications.push(a));
 
-  // Seed sample tasks ("Needs you")
-  const sampleTasks = [
-    {
-      _id: new Types.ObjectId(),
-      id: 'task-1',
-      userId: defaultUserId,
-      type: 'captcha_required',
-      company: 'Stripe',
-      role: 'Senior Automation Engineer',
-      message: 'Cloudflare verification required on career page submission portal.',
-      status: 'open',
-      priority: 'high',
-      actionUrl: 'https://stripe.com/jobs',
-      createdAt: new Date(),
-    },
-    {
-      _id: new Types.ObjectId(),
-      id: 'task-2',
-      userId: defaultUserId,
-      type: 'salary_decision',
-      company: 'Paystack',
-      role: 'Staff Full-Stack Developer',
-      message: 'Confirm expected salary range ($120k-$140k) before auto-submitting draft.',
-      status: 'open',
-      priority: 'medium',
-      createdAt: new Date(),
-    },
-  ];
-  sampleTasks.forEach((t) => memoryTasks.push(t));
+    const sTasks = [
+      {
+        _id: new Types.ObjectId(),
+        id: `task-1-${seedUser.email}`,
+        userId: seedUser.id,
+        type: 'captcha_required',
+        company: 'Stripe',
+        role: 'Senior Automation Engineer',
+        message: 'Cloudflare verification required on career page submission portal.',
+        status: 'open',
+        priority: 'high',
+        actionUrl: 'https://stripe.com/jobs',
+        createdAt: new Date(),
+      },
+      {
+        _id: new Types.ObjectId(),
+        id: `task-2-${seedUser.email}`,
+        userId: seedUser.id,
+        type: 'salary_decision',
+        company: 'Paystack',
+        role: 'Staff Full-Stack Developer',
+        message: 'Confirm expected salary range ($120k-$140k) before auto-submitting draft.',
+        status: 'open',
+        priority: 'medium',
+        createdAt: new Date(),
+      },
+    ];
+    sTasks.forEach((t) => memoryTasks.push(t));
 
-  // Seed sample notifications for candidate pop-up
-  const sampleNotifications = [
-    {
-      _id: new Types.ObjectId(),
-      userId: defaultUserId,
-      type: 'draft_ready',
-      title: 'Stripe application draft ready',
-      body: 'AI drafted tailored CV emphasizing Playwright and scalable distributed architectures.',
-      readAt: null,
-      createdAt: new Date(Date.now() - 15 * 60 * 1000), // 15 mins ago
-    },
-    {
-      _id: new Types.ObjectId(),
-      userId: defaultUserId,
-      type: 'needs_user',
-      title: 'Action required: Stripe Captcha',
-      body: 'Career submission portal requires human verification before auto-apply can complete.',
-      readAt: null,
-      createdAt: new Date(Date.now() - 42 * 60 * 1000), // 42 mins ago
-    },
-    {
-      _id: new Types.ObjectId(),
-      userId: defaultUserId,
-      type: 'sent',
-      title: 'Paystack application dispatched',
-      body: 'Verified profile and tailored cover letter delivered to Paystack hiring portal.',
-      readAt: null,
-      createdAt: new Date(Date.now() - 3 * 3600 * 1000), // 3 hours ago
-    },
-    {
-      _id: new Types.ObjectId(),
-      userId: defaultUserId,
-      type: 'interview_invite',
-      title: 'Interview invitation: Apex Pay Tech',
-      body: 'Lead recruiter responded to your outreach sequence. Review invite details in Tracker.',
-      readAt: new Date(Date.now() - 18 * 3600 * 1000),
-      createdAt: new Date(Date.now() - 24 * 3600 * 1000), // 1 day ago
-    },
-  ];
-  sampleNotifications.forEach((n) => memoryNotifications.push(n));
+    const sNotifications = [
+      {
+        _id: new Types.ObjectId(),
+        userId: seedUser.id,
+        type: 'draft_ready',
+        title: 'Stripe application draft ready',
+        body: 'AI drafted tailored CV emphasizing Playwright and scalable distributed architectures.',
+        readAt: null,
+        createdAt: new Date(Date.now() - 15 * 60 * 1000), // 15 mins ago
+      },
+      {
+        _id: new Types.ObjectId(),
+        userId: seedUser.id,
+        type: 'needs_user',
+        title: 'Action required: Stripe Captcha',
+        body: 'Career submission portal requires human verification before auto-apply can complete.',
+        readAt: null,
+        createdAt: new Date(Date.now() - 42 * 60 * 1000), // 42 mins ago
+      },
+      {
+        _id: new Types.ObjectId(),
+        userId: seedUser.id,
+        type: 'sent',
+        title: 'Paystack application dispatched',
+        body: 'Verified profile and tailored cover letter delivered to Paystack hiring portal.',
+        readAt: null,
+        createdAt: new Date(Date.now() - 3 * 3600 * 1000), // 3 hours ago
+      },
+      {
+        _id: new Types.ObjectId(),
+        userId: seedUser.id,
+        type: 'interview_invite',
+        title: 'Interview invitation: Apex Pay Tech',
+        body: 'Lead recruiter responded to your outreach sequence. Review invite details in Tracker.',
+        readAt: new Date(Date.now() - 18 * 3600 * 1000),
+        createdAt: new Date(Date.now() - 24 * 3600 * 1000), // 1 day ago
+      },
+    ];
+    sNotifications.forEach((n) => memoryNotifications.push(n));
+  }
 
   const createQueryChain = (data: any[]) => {
     const chain: any = {
@@ -426,18 +368,26 @@ export function activateMemoryDb(): void {
 
   // 1. User
   (User as any).exists = (query: any) => {
-    const found = memoryUsers.find((u) => u.email === query.email?.toLowerCase());
+    const qEmail = query?.email ? String(query.email).toLowerCase().trim() : undefined;
+    const found = memoryUsers.find((u) => u.email?.toLowerCase?.() === qEmail);
     return {
       select: () => Promise.resolve(found ? { _id: found._id } : null),
       then: (resolve: any) => resolve(found ? { _id: found._id } : null),
     };
   };
   (User as any).findOne = (query: any) => {
+    const qEmail = query?.email ? String(query.email).toLowerCase().trim() : undefined;
     const found = memoryUsers.find(
       (u) =>
-        (query.email && u.email === query.email?.toLowerCase()) ||
-        (query._id && String(u._id) === String(query._id)),
+        (qEmail && u.email?.toLowerCase?.() === qEmail) ||
+        (query?._id && String(u._id) === String(query._id)) ||
+        (query?.id && String(u.id) === String(query.id)),
     );
+    if (found && !found.save) {
+      found.save = function () {
+        return Promise.resolve(this);
+      };
+    }
     return {
       select: () => Promise.resolve(found || null),
       lean: () => Promise.resolve(found || null),
@@ -445,7 +395,12 @@ export function activateMemoryDb(): void {
     };
   };
   (User as any).findById = (id: any) => {
-    const found = memoryUsers.find((u) => String(u._id) === String(id));
+    const found = memoryUsers.find((u) => String(u._id) === String(id) || String(u.id) === String(id));
+    if (found && !found.save) {
+      found.save = function () {
+        return Promise.resolve(this);
+      };
+    }
     return {
       select: () => ({
         lean: () => Promise.resolve(found || null),
@@ -462,6 +417,11 @@ export function activateMemoryDb(): void {
       id: String(_id),
       ...doc,
       email: doc.email.toLowerCase(),
+      isEmailVerified: doc.isEmailVerified ?? false,
+      onboardingStage: doc.onboardingStage || 'otp_pending',
+      save() {
+        return Promise.resolve(this);
+      },
       toObject() {
         return { ...this };
       },
@@ -489,40 +449,9 @@ export function activateMemoryDb(): void {
         (query.userId && String(x.userId) === String(query.userId)) ||
         (query._id && String(x._id) === String(query._id)),
     );
-    if (!p && query.userId) {
-      p = {
-        _id: new Types.ObjectId(),
-        userId: query.userId,
-        status: 'draft',
-        firstName: 'Alex',
-        lastName: 'Okafor',
-        fullName: 'Alex Okafor',
-        email: 'candidate@javi.ai',
-        phone: '+234 801 234 5678',
-        headline: 'Lead Automation & Product Engineer',
-        location: 'Lekki, Lagos',
-        careerPages: [],
-        rules: { dailySendCap: 15, approvalMode: 'review' },
-        targetRoles: ['Lead Automation Engineer', 'Full-Stack Developer'],
-        primarySkills: ['TypeScript', 'React', 'Node.js'],
-        secondarySkills: ['PostgreSQL', 'Docker'],
-        toolsAndFrameworks: ['Playwright', 'Vite'],
-        experience: defaultProfile.experience,
-        education: defaultProfile.education,
-        projects: defaultProfile.projects,
-        set(keyOrObj: any, val?: any) {
-          if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
-          else this[keyOrObj] = val;
-        },
-        toObject() {
-          return { ...this };
-        },
-        save() {
-          return Promise.resolve(this);
-        },
-      };
-      memoryProfiles.push(p);
-    }
+    // Unknown users have no profile; loadProfile() creates an empty draft. Never hand a new user
+    // someone else's seeded data.
+    p = p ?? null;
     return {
       ...p,
       lean: () => Promise.resolve(p),
@@ -562,13 +491,27 @@ export function activateMemoryDb(): void {
     const p = {
       _id: new Types.ObjectId(),
       ...doc,
+      // Mirror the mongoose schema's array/rules defaults so callers can rely on them.
       careerPages: doc.careerPages || [],
-      rules: doc.rules || { dailySendCap: 15, approvalMode: 'review' },
+      rules: {
+        dailySendCap: 15, approvalMode: 'review', autoApproveMinScore: 0.75,
+        sendingHours: { start: 8, end: 18, timezone: 'UTC' }, weekdaysOnly: true, ...doc.rules,
+      },
+      remotePreference: doc.remotePreference || 'any',
       experience: doc.experience || [],
       education: doc.education || [],
       projects: doc.projects || [],
+      certifications: doc.certifications || [],
       targetRoles: doc.targetRoles || [],
+      locations: doc.locations || [],
+      skills: doc.skills || [],
       primarySkills: doc.primarySkills || [],
+      secondarySkills: doc.secondarySkills || [],
+      toolsAndFrameworks: doc.toolsAndFrameworks || [],
+      languages: doc.languages || [],
+      links: doc.links || [],
+      blockedCompanies: doc.blockedCompanies || [],
+      answerBank: doc.answerBank || [],
       set(keyOrObj: any, val?: any) {
         if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
         else this[keyOrObj] = val;
@@ -605,11 +548,18 @@ export function activateMemoryDb(): void {
     }
     return createQueryChain(filtered);
   };
-  (Application as any).countDocuments = (query?: any) => {
-    let filtered = [...memoryApplications];
-    if (query?.status) {
-      filtered = filtered.filter((a) => a.status === query.status);
-    }
+  // Honour the filters the safety rules use (per-user approvals, dry-run counts), not just status.
+  (Application as any).countDocuments = (query: any = {}) => {
+    const filtered = memoryApplications.filter((a) => {
+      if (query.userId && String(a.userId) !== String(query.userId)) return false;
+      if (query.channel && a.channel !== query.channel) return false;
+      if (query.status) {
+        const allowed: string[] = typeof query.status === 'object' && query.status.$in ? query.status.$in : [query.status];
+        if (!allowed.includes(a.status)) return false;
+      }
+      if (query['history.note'] && !(a.history ?? []).some((h: any) => h.note === query['history.note'])) return false;
+      return true;
+    });
     return Promise.resolve(filtered.length);
   };
   (Application as any).create = (doc: any) => {
@@ -619,15 +569,24 @@ export function activateMemoryDb(): void {
   };
 
   // 6. Task
+  // Tasks are real documents here (id, save) because the reply link and live sessions read and update them.
+  const taskDoc = (doc: any) => {
+    const t: any = { _id: new Types.ObjectId(), status: 'open', questions: [], createdAt: new Date(), ...doc };
+    Object.defineProperty(t, 'id', { get: () => String(t._id), enumerable: false });
+    t.save = () => Promise.resolve(t);
+    t.toObject = () => ({ ...t });
+    return t;
+  };
+  const taskMatch = (t: any, q: any = {}) => Object.entries(q).every(([k, v]) => String(t[k]) === String(v));
+  const thenable = (v: any) => ({ lean: () => Promise.resolve(v), sort: () => thenable(v), then: (r: any, j: any) => Promise.resolve(v).then(r, j), catch: (j: any) => Promise.resolve(v).catch(j) });
   (Task as any).find = (query?: any) => {
-    let filtered = [...memoryTasks];
-    if (query?.status) {
-      filtered = filtered.filter((t) => t.status === query.status);
-    }
+    const filtered = memoryTasks.filter((t) => taskMatch(t, query)).sort((a, b) => b.createdAt - a.createdAt);
     return createQueryChain(filtered);
   };
+  (Task as any).findById = (id: any) => thenable(memoryTasks.find((t) => String(t._id) === String(id)) ?? null);
+  (Task as any).findOne = (query?: any) => thenable(memoryTasks.filter((t) => taskMatch(t, query)).sort((a, b) => b.createdAt - a.createdAt)[0] ?? null);
   (Task as any).create = (doc: any) => {
-    const t = { _id: new Types.ObjectId(), ...doc };
+    const t = taskDoc(doc);
     memoryTasks.push(t);
     return Promise.resolve(t);
   };
@@ -708,45 +667,99 @@ export function activateMemoryDb(): void {
   (AuditLog as any).find = () => createQueryChain([]);
   (AuditLog as any).create = (doc: any) => Promise.resolve({ _id: new Types.ObjectId(), ...doc });
 
-  // 9. BusinessLead
-  (BusinessLead as any).find = (query?: any) => {
-    let filtered = [...memoryBusinessLeads];
-    if (query?.needsServices !== undefined) {
-      filtered = filtered.filter((b) => b.needsServices === query.needsServices);
-    }
-    return createQueryChain(filtered);
+  // 10. SiteAccount (accounts the live browser creates on job sites)
+  const memorySiteAccounts: any[] = [];
+  const findAccount = (q: any) => memorySiteAccounts.find((a) => String(a.userId) === String(q.userId) && a.domain === q.domain) ?? null;
+  (SiteAccount as any).findOne = (q: any) => {
+    const found = findAccount(q);
+    if (found) found.save = () => Promise.resolve(found);
+    return { lean: () => Promise.resolve(found), then: (r: any, j: any) => Promise.resolve(found).then(r, j) };
   };
-  (BusinessLead as any).findOne = (query: any) => {
-    const found = memoryBusinessLeads.find(
-      (b) =>
-        (query._id && String(b._id) === String(query._id)) ||
-        (query.name && b.name === query.name),
+  (SiteAccount as any).find = (q: any = {}) => {
+    const list = memorySiteAccounts
+      .filter((a) => !q.userId || String(a.userId) === String(q.userId))
+      .map(({ passwordEnc: _p, ...rest }) => rest); // export never includes passwords
+    return { lean: () => Promise.resolve(list), then: (r: any, j: any) => Promise.resolve(list).then(r, j) };
+  };
+  (SiteAccount as any).deleteMany = (q: any = {}) => {
+    for (let i = memorySiteAccounts.length - 1; i >= 0; i--) if (String(memorySiteAccounts[i].userId) === String(q.userId)) memorySiteAccounts.splice(i, 1);
+    return Promise.resolve({ acknowledged: true });
+  };
+  (SiteAccount as any).updateOne = (q: any, update: any, opts: any = {}) => {
+    let found = findAccount(q);
+    if (!found && opts.upsert) memorySiteAccounts.push((found = { _id: new Types.ObjectId(), ...q }));
+    if (found) Object.assign(found, update.$set ?? update);
+    return Promise.resolve({ acknowledged: true });
+  };
+
+  // 9. TaxonomyRequest
+  const memoryTaxonomyRequests: any[] = [];
+  (TaxonomyRequest as any).deleteMany = (q: any = {}) => {
+    for (let i = memoryTaxonomyRequests.length - 1; i >= 0; i--) if (!q.email || memoryTaxonomyRequests[i].email === q.email) memoryTaxonomyRequests.splice(i, 1);
+    return Promise.resolve({ acknowledged: true });
+  };
+  (TaxonomyRequest as any).create = (doc: any) => {
+    const item = { _id: new Types.ObjectId(), createdAt: new Date(), ...doc };
+    memoryTaxonomyRequests.push(item);
+    return Promise.resolve(item);
+  };
+
+  // 9. BusinessLead / BusinessServices: small working stores with real documents (save, set, id).
+  const memoryBusinessServices: any[] = [];
+  const asDoc = (store: any[], raw: any) => {
+    const d: any = { _id: new Types.ObjectId(), createdAt: new Date(), updatedAt: new Date(), ...raw };
+    Object.defineProperty(d, 'id', { get: () => String(d._id), enumerable: false });
+    d.save = () => {
+      d.updatedAt = new Date();
+      return Promise.resolve(d);
+    };
+    d.set = (k: any, v?: any) => (typeof k === 'object' ? Object.assign(d, k) : (d[k] = v));
+    d.markModified = () => undefined;
+    d.toObject = () => ({ ...d });
+    store.push(d);
+    return d;
+  };
+  const match = (d: any, q: any = {}) => Object.entries(q).every(([k, v]) => String(d[k]) === String(v));
+  const docQuery = (v: any) => ({ lean: () => Promise.resolve(v), then: (r: any, j: any) => Promise.resolve(v).then(r, j), catch: (j: any) => Promise.resolve(v).catch(j) });
+  const listQuery = (list: any[]) => {
+    const q: any = {
+      sort: (spec: any) => {
+        const [k, dir] = Object.entries(spec ?? {})[0] ?? [];
+        if (k) list.sort((a: any, b: any) => (a[k as string] > b[k as string] ? (dir as number) : -(dir as number)));
+        return q;
+      },
+      limit: (n: number) => ((list = list.slice(0, n)), q),
+      lean: () => Promise.resolve(list),
+      then: (r: any, j: any) => Promise.resolve(list).then(r, j),
+    };
+    return q;
+  };
+  (BusinessLead as any).create = (doc: any) => {
+    if (doc.osmId && memoryBusinessLeads.some((l) => String(l.userId) === String(doc.userId) && l.osmId === doc.osmId)) {
+      return Promise.reject(Object.assign(new Error('duplicate'), { code: 11000 }));
+    }
+    return Promise.resolve(asDoc(memoryBusinessLeads, { contacts: [], pitches: [], notes: [], history: [], valueInputs: {}, status: 'new', vertical: 'other', ...doc }));
+  };
+  (BusinessLead as any).find = (q?: any) => listQuery(memoryBusinessLeads.filter((l) => match(l, q)));
+  (BusinessLead as any).findOne = (q?: any) => docQuery(memoryBusinessLeads.find((l) => match(l, q)) ?? null);
+  (BusinessLead as any).findById = (id: any) => docQuery(memoryBusinessLeads.find((l) => String(l._id) === String(id)) ?? null);
+  (BusinessLead as any).deleteOne = (q: any) => {
+    const i = memoryBusinessLeads.findIndex((l) => match(l, q));
+    if (i >= 0) memoryBusinessLeads.splice(i, 1);
+    return Promise.resolve({ deletedCount: i >= 0 ? 1 : 0 });
+  };
+  (BusinessLead as any).deleteMany = (q: any) => {
+    for (let i = memoryBusinessLeads.length - 1; i >= 0; i--) if (match(memoryBusinessLeads[i], q)) memoryBusinessLeads.splice(i, 1);
+    return Promise.resolve({ acknowledged: true });
+  };
+  (BusinessServices as any).findOne = (q?: any) => docQuery(memoryBusinessServices.find((s) => match(s, q)) ?? null);
+  (BusinessServices as any).deleteOne = (q: any) => {
+    const i = memoryBusinessServices.findIndex((x) => match(x, q));
+    if (i >= 0) memoryBusinessServices.splice(i, 1);
+    return Promise.resolve({ deletedCount: i >= 0 ? 1 : 0 });
+  };
+  (BusinessServices as any).create = (doc: any) =>
+    Promise.resolve(
+      asDoc(memoryBusinessServices, { hourlyRate: 7500, fxRate: 1550, marginPct: 30, guarantees: { ownership: true, liveByDays: 21 }, caseStudies: [], ...doc }),
     );
-    if (found) {
-      found.save = () => Promise.resolve(found);
-    }
-    return Promise.resolve(found || null);
-  };
-  (BusinessLead as any).findOneAndUpdate = (query: any, update: any, opts: any) => {
-    let found = memoryBusinessLeads.find(
-      (b) =>
-        (query._id && String(b._id) === String(query._id)) ||
-        (query.name && b.name === query.name),
-    );
-    const updateData = update.$set ? { ...update, ...update.$set } : update;
-    if (!found && opts?.upsert) {
-      found = {
-        _id: new Types.ObjectId(),
-        ...updateData,
-        save() {
-          return Promise.resolve(this);
-        },
-      };
-      memoryBusinessLeads.push(found);
-    } else if (found) {
-      Object.assign(found, updateData);
-      found.save = () => Promise.resolve(found);
-    }
-    return Promise.resolve(found);
-  };
 }

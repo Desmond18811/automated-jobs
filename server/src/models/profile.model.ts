@@ -68,7 +68,7 @@ export interface SavedAnswer {
 
 export interface CareerPage {
   url: string;
-  ats: 'greenhouse' | 'lever' | 'ashby' | 'workday' | 'unsupported';
+  ats: 'greenhouse' | 'lever' | 'ashby' | 'workable' | 'smartrecruiters' | 'workday' | 'unsupported';
   token?: string;
   addedAt: Date;
 }
@@ -120,6 +120,7 @@ export interface IProfile {
   pronouns?: string;
   address?: Address;
   location?: string;
+  avatarUrl?: string;
 
   // Online Presence & Socials
   linkedinUrl?: string;
@@ -144,6 +145,10 @@ export interface IProfile {
   salaryFloor?: { amount?: number; currency: string; period: Period };
   salaryExpectation?: SalaryExpectation;
   yearsOfExperience?: number;
+  inferredLevel?: string;
+  validatedLevel?: string;
+  industry?: string;
+  specificTitle?: string;
   currentCompany?: string;
   currentTitle?: string;
 
@@ -205,7 +210,7 @@ const languageSkillSchema = new Schema<LanguageSkill>(
 const answerSchema = new Schema<SavedAnswer>({ key: String, question: String, answer: String, reusable: { type: Boolean, default: true }, updatedAt: Date }, opts);
 
 const careerPageSchema = new Schema<CareerPage>(
-  { url: String, ats: { type: String, enum: ['greenhouse', 'lever', 'ashby', 'workday', 'unsupported'] }, token: String, addedAt: Date },
+  { url: String, ats: { type: String, enum: ['greenhouse', 'lever', 'ashby', 'workable', 'smartrecruiters', 'workday', 'unsupported'] }, token: String, addedAt: Date },
   opts,
 );
 
@@ -249,6 +254,7 @@ const profileSchema = new Schema<IProfile>(
     pronouns: String,
     address: addressSchema,
     location: String,
+    avatarUrl: { type: String, default: '' },
 
     // Online Presence
     linkedinUrl: { type: String, default: '' },
@@ -258,12 +264,14 @@ const profileSchema = new Schema<IProfile>(
     links: [linkSchema],
 
     // Work Authorization & Legal (ATS)
-    workAuthorization: { type: String, enum: ['authorized', 'not_authorized'], default: 'authorized' },
-    requiresSponsorship: { type: Boolean, default: false },
-    futureSponsorship: { type: Boolean, default: false },
-    securityClearance: { type: String, enum: ['none', 'confidential', 'secret', 'top_secret', 'other'], default: 'none' },
-    willingToRelocate: { type: Boolean, default: false },
-    noticePeriod: { type: String, default: '2 weeks' },
+    // No defaults: these answer legal questions on application forms, so an unanswered field must
+    // stay unset and become a needs_user task rather than a guessed "Yes".
+    workAuthorization: { type: String, enum: ['authorized', 'not_authorized'] },
+    requiresSponsorship: Boolean,
+    futureSponsorship: Boolean,
+    securityClearance: { type: String, enum: ['none', 'confidential', 'secret', 'top_secret', 'other'] },
+    willingToRelocate: Boolean,
+    noticePeriod: String,
     earliestStartDate: String,
 
     // Target Roles & Preferences
@@ -276,7 +284,11 @@ const profileSchema = new Schema<IProfile>(
       period: { type: String, enum: ['hour', 'month', 'year'], default: 'year' },
     },
     salaryExpectation: salaryExpectationSchema,
-    yearsOfExperience: { type: Number, default: 0 },
+    yearsOfExperience: Number,
+    inferredLevel: { type: String, default: '' },
+    validatedLevel: { type: String, default: '' },
+    industry: { type: String, default: '' },
+    specificTitle: { type: String, default: '' },
     currentCompany: String,
     currentTitle: String,
 
@@ -286,7 +298,6 @@ const profileSchema = new Schema<IProfile>(
     highestEducationLevel: {
       type: String,
       enum: ['high_school', 'associate', 'bachelor', 'master', 'doctorate', 'bootcamp', 'self_taught'],
-      default: 'bachelor',
     },
     skills: [skillSchema],
     primarySkills: { type: [String], default: [] },

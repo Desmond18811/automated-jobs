@@ -38,9 +38,11 @@ export const APPLICATIONS: ApplicationRow[] = [
 
 export const NOTIFICATIONS: NotificationItem[] = [
   { id: 'a', av: 'javi', b: 'Javi', t: ' applied to ', b2: 'Designer, Stripe', sub: '2 min ago · via Greenhouse' },
-  { id: 'b', av: 'https://images.unsplash.com/photo-1611432579402-7037e3e2c1e4?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Sarah Brendan', t: ' wants to interview', sub: 'Recruiter at Linear · Tue 10:00' },
-  { id: 'c', av: 'https://images.unsplash.com/photo-1573496358961-3c82861ab8f4?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Offer', t: ' from ', b2: 'Notion · $142k', sub: 'Senior UX Designer · Maya Patel' },
-  { id: 'd', av: 'https://images.unsplash.com/photo-1522529599102-193c0d76b5b6?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Daniel Oyedele', t: ' replied to you', sub: 'Talent at Figma · "Free this week?"' },
+  { id: 'b', av: 'https://images.unsplash.com/photo-1611432579402-7037e3e2c1e4?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Folake Adeleke', t: ' wants to interview', sub: 'Recruiter at Linear · Tue 10:00' },
+  { id: 'c', av: 'https://images.unsplash.com/photo-1573496358961-3c82861ab8f4?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Offer', t: ' from ', b2: 'Notion · $142k', sub: 'Senior UX Designer · Chioma Okonkwo' },
+  { id: 'd', av: 'https://images.unsplash.com/photo-1616805765352-beedbad46b2a?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Daniel Oyedele', t: ' replied to you', sub: 'Talent at Figma · "Free this week?"' },
   { id: 'e', av: 'javi', b: 'Javi', t: ' applied to ', b2: '12 roles', sub: 'Frontend · Remote · via LinkedIn' },
-  { id: 'f', av: 'https://images.unsplash.com/photo-1587064712555-6e206484699b?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'James Eze', t: ' viewed your CV', sub: 'Hiring Manager at Vercel' },
+  { id: 'f', av: 'https://images.unsplash.com/photo-1769636929231-3cd7f853d038?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'James Eze', t: ' viewed your CV', sub: 'Hiring Manager at Vercel' },
+  { id: 'g', av: 'https://images.unsplash.com/photo-1770235622094-a6484f7698ed?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Ngozi Okonjo', t: ' sent an invitation', sub: 'Talent Lead at Moniepoint · "Quick call?"' },
+  { id: 'h', av: 'https://images.unsplash.com/photo-1614890085618-0e1054da74f8?w=160&h=160&fit=crop&crop=faces&auto=format&q=70', b: 'Babajide Sanwo', t: ' scheduled an interview', sub: 'Engineering Director at Paystack' },
 ];

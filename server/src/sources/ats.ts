@@ -5,7 +5,8 @@ import type { JobSource, RawJob } from './types';
 
 /**
  * "Company career pages" without scraping: most companies host jobs on an ATS with a public JSON board.
- * Paste a careers link; if it's Greenhouse, Lever or Ashby we read the official board API.
+ * Paste a careers link; if it's Greenhouse, Lever, Ashby, Workable or SmartRecruiters we read the
+ * official public board API.
  */
 export function detectAts(raw: string): { ats: CareerPage['ats']; token?: string } {
   let u: URL;
@@ -22,6 +23,9 @@ export function detectAts(raw: string): { ats: CareerPage['ats']; token?: string
   }
   if (host === 'jobs.lever.co' && seg[0]) return { ats: 'lever', token: seg[0] };
   if (host === 'jobs.ashbyhq.com' && seg[0]) return { ats: 'ashby', token: seg[0] };
+  if (host === 'apply.workable.com' && seg[0] && seg[0] !== 'api') return { ats: 'workable', token: seg[0] };
+  if (/(^|\.)workable\.com$/.test(host) && host !== 'apply.workable.com' && host !== 'www.workable.com') return { ats: 'workable', token: host.split('.')[0] };
+  if ((host === 'jobs.smartrecruiters.com' || host === 'careers.smartrecruiters.com') && seg[0]) return { ats: 'smartrecruiters', token: seg[0] };
   return { ats: 'unsupported' };
 }
 
@@ -103,6 +107,75 @@ export function ashby(token: string): JobSource {
         postedAt: j.publishedAt ? new Date(j.publishedAt) : undefined,
         applyUrl: j.applyUrl ?? j.jobUrl,
       }));
+    },
+  };
+}
+
+interface WorkableJob {
+  title: string; shortcode: string; url: string; application_url?: string; city?: string; country?: string;
+  telecommuting?: boolean; description?: string; published_on?: string; created_at?: string;
+}
+
+/** Workable's public jobs widget feed (the same one company career sites embed). */
+export function workable(token: string): JobSource {
+  return {
+    name: `workable:${token}`,
+    async fetch(): Promise<RawJob[]> {
+      const data = await fetchJson<{ name?: string; jobs?: WorkableJob[] }>(
+        `https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(token)}?details=true`,
+      );
+      return (data.jobs ?? []).map((j) => {
+        const location = [j.city, j.country].filter(Boolean).join(', ') || undefined;
+        return {
+          source: 'workable',
+          sourceId: j.shortcode,
+          url: j.url,
+          company: data.name ?? token,
+          title: j.title,
+          location,
+          remote: j.telecommuting ? true : remoteFrom(location),
+          description: htmlToText(j.description ?? ''),
+          postedAt: j.published_on || j.created_at ? new Date((j.published_on || j.created_at)!) : undefined,
+          applyUrl: j.application_url ?? j.url,
+        };
+      });
+    },
+  };
+}
+
+interface SrPosting {
+  id: string; name: string; releasedDate?: string; company?: { name?: string; identifier?: string };
+  location?: { city?: string; country?: string; remote?: boolean; fullLocation?: string };
+}
+interface SrDetail { jobAd?: { sections?: Record<string, { title?: string; text?: string }> }; postingUrl?: string; applyUrl?: string }
+
+/** SmartRecruiters' public posting API. Descriptions need one request per posting, so at most 30. */
+export function smartrecruiters(token: string): JobSource {
+  return {
+    name: `smartrecruiters:${token}`,
+    async fetch(): Promise<RawJob[]> {
+      const base = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(token)}/postings`;
+      const list = await fetchJson<{ content?: SrPosting[] }>(`${base}?limit=30`);
+      const out: RawJob[] = [];
+      for (const p of (list.content ?? []).slice(0, 30)) {
+        const d = await fetchJson<SrDetail>(`${base}/${encodeURIComponent(p.id)}`).catch(() => ({}) as SrDetail);
+        const sections = Object.values(d.jobAd?.sections ?? {});
+        const location = p.location?.fullLocation ?? ([p.location?.city, p.location?.country].filter(Boolean).join(', ') || undefined);
+        const url = d.postingUrl ?? `https://jobs.smartrecruiters.com/${encodeURIComponent(token)}/${encodeURIComponent(p.id)}`;
+        out.push({
+          source: 'smartrecruiters',
+          sourceId: p.id,
+          url,
+          company: p.company?.name ?? token,
+          title: p.name,
+          location,
+          remote: p.location?.remote ? true : remoteFrom(location),
+          description: sections.map((s) => `${s.title ?? ''}\n${htmlToText(s.text ?? '')}`).join('\n\n'),
+          postedAt: p.releasedDate ? new Date(p.releasedDate) : undefined,
+          applyUrl: d.applyUrl ?? url,
+        });
+      }
+      return out;
     },
   };
 }

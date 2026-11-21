@@ -2,9 +2,9 @@ import type { FC } from 'react';
 import { AVATAR_DANIEL, AVATAR_MAYA, AVATAR_JAMES } from '@/assets/avatars';
 
 const HIRED = [
-  { name: 'Daniel Kim', role: 'Product Manager', from: 'Wipro', to: 'Spotify', av: AVATAR_DANIEL },
-  { name: 'Maya Patel', role: 'UX Designer', from: 'Freelance', to: 'Notion', av: AVATAR_MAYA },
-  { name: 'James Ortiz', role: 'Frontend Engineer', from: 'Andela', to: 'Vercel', av: AVATAR_JAMES },
+  { name: 'Daniel Oyedele', role: 'Product Manager', from: 'Kuda Bank', to: 'Spotify', av: AVATAR_DANIEL },
+  { name: 'Chioma Okonkwo', role: 'UX Designer', from: 'Paystack', to: 'Notion', av: AVATAR_MAYA },
+  { name: 'James Eze', role: 'Frontend Engineer', from: 'Andela', to: 'Vercel', av: AVATAR_JAMES },
 ];
 
 export const HiredSection: FC = () => (

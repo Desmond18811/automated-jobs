@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { complete, completeJson } from './llm';
 import { renderCvHtml, renderCvPdf, type CvData } from './cvRenderer';
-import { sendWhatsAppAlert } from '../whatsapp.service';
 import { storagePath } from '../../lib/storage';
 import { env } from '../../config/env';
 import { logger } from '../../lib/logger';
@@ -288,17 +287,10 @@ Return JSON: {"answers": [{"key": "...", "answer": "..."}]}`;
     })),
   ];
 
-  // 6. Send WhatsApp Notification Alert
-  const targetPhone = candidate.phone || env.WHATSAPP_TO || '2349025958370';
-  const alertTitle = `Applied: ${company} (${title})`;
-  const alertBody = `JAVI has tailored your CV to match ${company}'s payments requirements, filled your form fields (including LinkedIn profile), answered ${answeredQuestions.length} custom questions, and submitted your application!`;
-
-  const whatsAppResult = await sendWhatsAppAlert(candidate.id || 'candidate_001', {
-    to: targetPhone,
-    type: 'sent',
-    title: alertTitle,
-    body: alertBody,
-  });
+  // 6. Demo only: nothing was submitted, so nothing is sent. The preview shows what an alert would say.
+  const targetPhone = candidate.phone || env.WHATSAPP_TO || '';
+  const alertBody = `DEMO (not submitted): JAVI tailored a CV for ${company} (${title}) and planned answers for ${answeredQuestions.length} custom questions.`;
+  const whatsAppResult: { sent: boolean; channel: string; to?: string } = { sent: false, channel: 'none' };
 
   return {
     job: { company, title },

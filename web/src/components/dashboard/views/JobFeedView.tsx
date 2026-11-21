@@ -12,7 +12,9 @@ interface JobItem {
   salary: string;
   source: string;
   status: string;
-  matchScore: number;
+  /** The user's real match score (0-100), or null when this job hasn't been scored for them. */
+  matchScore: number | null;
+  sourceLink?: { label: string; href: string };
   url?: string;
   description?: string;
   tags?: string[];
@@ -53,29 +55,39 @@ export const JobFeedView: FC = () => {
       const mapped: JobItem[] = rawList.map((j: any, idx: number) => {
         const company = j.company || 'Company';
         const title = j.title || 'Job Opening';
-        const salaryStr = j.salary?.min
-          ? `$${Math.round(j.salary.min / 1000)}k${j.salary.max ? `–$${Math.round(j.salary.max / 1000)}k` : '+'}`
-          : 'Competitive';
+        // Real salary currency; never assume dollars.
+        const cur = j.salary?.currency ? `${j.salary.currency} ` : '';
+        const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+        const salaryStr = j.salary?.min ? `${cur}${fmt(j.salary.min)}${j.salary.max ? `–${fmt(j.salary.max)}` : '+'}` : 'Not stated';
 
+        // Only what the matcher actually computed for this user; nothing invented.
+        const m = j.match;
+        const b = m?.breakdown ?? {};
+        const why: { good: boolean; text: string }[] = [];
+        if (m) {
+          if (typeof b.title === 'number') why.push({ good: b.title >= 0.5, text: `Title fit ${Math.round(b.title * 100)}% against your target roles` });
+          if (typeof b.skillHits === 'number') why.push({ good: b.skillHits > 0, text: `${b.skillHits} of your skills appear in the posting` });
+          if (typeof b.text === 'number') why.push({ good: b.text >= 0.3, text: `Description similarity ${Math.round(b.text * 100)}%` });
+          for (const note of m.filterNotes ?? []) why.push({ good: false, text: note });
+        }
+        const src = String(j.source || '').replace(/^import:/, '');
         return {
           id: j._id || j.id || String(idx),
           initial: company.charAt(0).toUpperCase(),
           color: colorFor(company),
           title,
           company,
-          location: j.location || (j.remote ? 'Remote' : 'Flexible location'),
+          location: j.location || (j.remote ? 'Remote' : 'Location not stated'),
           salary: salaryStr,
-          source: j.source ? `via ${j.source.replace(/^import:/, '')}` : 'via Ingestion',
-          status: 'Matched',
-          matchScore: Math.min(96, Math.max(78, 96 - (idx % 18))),
+          source: src ? `via ${src === 'remoteok' ? 'Remote OK' : src}` : '',
+          // Remote OK asks for credit and a link back to their listing.
+          sourceLink: src === 'remoteok' && j.url ? { label: 'Listed on Remote OK', href: j.url } : undefined,
+          status: m ? (m.status === 'matched' ? 'Matched' : m.status) : 'Not scored yet',
+          matchScore: m && typeof m.score === 'number' ? Math.round(m.score * 100) : null,
           url: j.applyUrl || j.url,
           description: j.description,
           tags: j.tags || [],
-          whyMatched: [
-            { good: true, text: `Role matches your target title: ${title}` },
-            { good: true, text: `Location preference aligned: ${j.location || 'Remote'}` },
-            { good: true, text: 'Skills in description align with your verified profile' },
-          ],
+          whyMatched: why,
         };
       });
 
@@ -98,20 +110,27 @@ export const JobFeedView: FC = () => {
     loadJobs();
   }, []);
 
+  /** One link or many: paste anything containing http(s) links (one per line, commas, a copied column). */
   const handleAddUrl = async () => {
-    if (!newUrl.trim()) return;
+    const urls = Array.from(new Set(newUrl.match(/https?:\/\/[^\s"'<>,;]+/gi) ?? []));
+    if (!urls.length) {
+      showToast('Paste at least one http(s) link');
+      return;
+    }
     setLoading(true);
     try {
-      await jobsApi.importJobs({ url: newUrl.trim() });
-      showToast('Job link added & queued for match evaluation!');
+      const res = await jobsApi.addLinks(urls);
+      const failed = res.results.filter((r) => r.status === 'failed');
+      showToast(
+        failed.length
+          ? `${res.queued} of ${res.count} links queued. Couldn't read: ${failed.map((f) => f.url).slice(0, 2).join(', ')}${failed.length > 2 ? '…' : ''}`
+          : `${res.queued} link${res.queued === 1 ? '' : 's'} queued: JAVI will tailor your CV and apply in the JAVI browser.`,
+      );
       setNewUrl('');
       setShowImportModal(false);
       await loadJobs();
     } catch (e: any) {
-      showToast(e?.message || 'Processed job link');
-      setNewUrl('');
-      setShowImportModal(false);
-      await loadJobs();
+      showToast(e?.message || 'Could not add those links');
     } finally {
       setLoading(false);
     }
@@ -123,13 +142,12 @@ export const JobFeedView: FC = () => {
     setLoading(true);
     try {
       const res = await jobsApi.importJobs({ file });
-      showToast(`Imported ${res?.importedCount || 1} job posting(s) from ${file.name}!`);
+      const failedLinks = (res?.linkResults ?? []).filter((r: any) => r.status === 'failed').length;
+      showToast(`Imported ${res?.importedCount ?? 0} job(s) from ${file.name}${failedLinks ? ` (${failedLinks} links couldn't be read)` : ''}.`);
       setShowImportModal(false);
       await loadJobs();
     } catch (e: any) {
-      showToast(e?.message || `Imported ${file.name}`);
-      setShowImportModal(false);
-      await loadJobs();
+      showToast(e?.message || `Could not import ${file.name}`);
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -232,7 +250,7 @@ export const JobFeedView: FC = () => {
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleAddUrl();
           }}
-          placeholder="Paste a job link (Greenhouse, Lever, LinkedIn, Workday, career page...)"
+          placeholder="Paste one or more job links (Greenhouse, Lever, Workday, any career page…)"
           style={{
             flex: 1,
             height: 40,
@@ -415,6 +433,7 @@ export const JobFeedView: FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {j.matchScore !== null && (
                     <span
                       style={{
                         display: 'flex',
@@ -432,6 +451,7 @@ export const JobFeedView: FC = () => {
                       <SparklesIcon size={11} color="#0f766e" />
                       {j.matchScore}%
                     </span>
+                    )}
                     <span
                       style={{
                         fontSize: 9.5,
@@ -476,6 +496,7 @@ export const JobFeedView: FC = () => {
                     {selectedJob.salary}
                   </span>
                 </div>
+                {selectedJob.matchScore !== null && (
                 <span
                   style={{
                     fontSize: 11,
@@ -489,17 +510,23 @@ export const JobFeedView: FC = () => {
                 >
                   {selectedJob.matchScore}% match
                 </span>
+                )}
               </div>
 
               {/* Match Factors */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-                  Why you matched
+                  {selectedJob.whyMatched.length ? 'Why you matched' : 'Not scored for you yet'}
                 </span>
+                {selectedJob.sourceLink && (
+                  <a href={selectedJob.sourceLink.href} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#2563eb' }}>
+                    {selectedJob.sourceLink.label}
+                  </a>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {selectedJob.whyMatched.map((w, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: '#374151' }}>
-                      <CheckIcon size={13} color="#059669" />
+                      {w.good ? <CheckIcon size={13} color="#059669" /> : <span style={{ width: 13, textAlign: 'center', color: '#b45309' }}>!</span>}
                       <span>{w.text}</span>
                     </div>
                   ))}
@@ -720,15 +747,17 @@ export const JobFeedView: FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>
-                    Job Post URL or Company Career Board
+                    Job links (one or many)
                   </label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={6}
                     value={newUrl}
                     onChange={(e) => setNewUrl(e.target.value)}
-                    placeholder="https://boards.greenhouse.io/company/jobs/12345"
+                    placeholder={'One link per line, up to 200\nhttps://boards.greenhouse.io/company/jobs/12345\nhttps://jobs.lever.co/company/abc'}
                     style={{
-                      height: 40,
+                      resize: 'vertical',
+                      lineHeight: '20px',
+                      paddingTop: 10,
                       border: '1px solid #d1d5db',
                       borderRadius: 8,
                       padding: '0 12px',
@@ -752,7 +781,7 @@ export const JobFeedView: FC = () => {
                     cursor: loading ? 'wait' : 'pointer',
                   }}
                 >
-                  {loading ? 'Importing...' : 'Fetch & Analyze Job'}
+                  {loading ? 'Reading links…' : 'Tailor & apply'}
                 </button>
               </div>
             )}

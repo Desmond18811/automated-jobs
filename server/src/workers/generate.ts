@@ -7,6 +7,7 @@ import { JobPost } from '../models/jobPost.model';
 import { notify } from '../services/notification.service';
 import { Profile } from '../models/profile.model';
 import { enqueueDelivery } from '../queues';
+import { MIN_REVIEWED_FOR_AUTO, userApprovalCount } from '../services/safety.service';
 
 export async function generateProcessor(job: Job<{ applicationId: string }>) {
   const app = await Application.findById(job.data.applicationId);
@@ -21,8 +22,10 @@ export async function generateProcessor(job: Job<{ applicationId: string }>) {
   await transition(app, 'drafted', 'documents generated');
 
   const { rules } = profile;
+  // Second line of defence: even if 'auto' got stored somehow, it only counts after 10 user approvals.
   const autoOk =
     rules.approvalMode === 'auto' &&
+    (await userApprovalCount(userId)) >= MIN_REVIEWED_FOR_AUTO &&
     app.channel !== 'assisted' &&
     app.score >= rules.autoApproveMinScore &&
     docs.factCheck.passed &&

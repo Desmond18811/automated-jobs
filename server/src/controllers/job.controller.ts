@@ -6,8 +6,9 @@ import { AppError, errorMessage, parseBody } from '../lib/http';
 import { clip, safeHost } from '../lib/normalize';
 import { currentUser } from '../middleware/auth';
 import { JobPost } from '../models/jobPost.model';
+import { Application } from '../models/application.model';
 import { defaultJobOpts, queues } from '../queues';
-import { extractJobFromUrl, upsertJob } from '../services/job.service';
+import { extractJobFromUrl, jobFromLink, upsertJob } from '../services/job.service';
 import type { RawJob } from '../sources/types';
 
 export const ManualJobSchema = z
@@ -21,7 +22,47 @@ export const ManualJobSchema = z
   })
   .refine((b) => b.url || b.applyEmail, 'Give a job link or an application email');
 
+const LinksSchema = z.object({ urls: z.array(z.string().trim()).min(1).max(200) });
+
+/** Pull every http(s) link out of pasted text or spreadsheet cells. */
+export function extractUrls(values: unknown[]): string[] {
+  const out = new Set<string>();
+  for (const v of values) {
+    for (const m of String(v ?? '').matchAll(/https?:\/\/[^\s"'<>,;]+/gi)) out.add(m[0].replace(/[).]+$/, ''));
+  }
+  return [...out];
+}
+
+/** Save each link as a job (rendering JS pages), then match it to this user, which tailors and applies per their rules. */
+async function queueLinks(userId: string, urls: string[]) {
+  const results: Array<{ url: string; status: 'queued' | 'already_added' | 'failed'; jobId?: string; title?: string; company?: string; error?: string }> = [];
+  const queue = [...urls];
+  const worker = async () => {
+    for (let url = queue.shift(); url; url = queue.shift()) {
+      try {
+        const { job, isNew } = await jobFromLink(url);
+        await queues.match.add('match', { jobId: job.id, userId }, defaultJobOpts);
+        results.push({ url, status: isNew ? 'queued' : 'already_added', jobId: job.id, title: job.title, company: job.company });
+      } catch (err) {
+        results.push({ url, status: 'failed', error: errorMessage(err) });
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return results.sort((a, b) => urls.indexOf(a.url) - urls.indexOf(b.url));
+}
+
 export class JobController {
+  /** POST /jobs/links {urls}: one link or hundreds. */
+  static async links(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const { urls } = parseBody(LinksSchema, req.body);
+    const clean = extractUrls(urls);
+    if (!clean.length) throw new AppError(400, 'No http(s) links found');
+    const results = await queueLinks(userId, clean);
+    res.status(201).json({ count: results.length, queued: results.filter((r) => r.status !== 'failed').length, results });
+  }
+
   static async manual(req: Request, res: Response) {
     const userId = currentUser(req);
     const b = parseBody(ManualJobSchema, req.body);
@@ -76,7 +117,15 @@ export class JobController {
       JobPost.find(query).sort({ postedAt: -1, createdAt: -1 }).skip(skip).limit(limit),
       JobPost.countDocuments(query),
     ]);
-    res.json({ jobs, total, count: jobs.length });
+    // The user's real match for each job (score, why, filter warnings); absent means not scored for them.
+    const apps = await Application.find({ userId: currentUser(req), jobId: { $in: jobs.map((j) => j._id) } }, { jobId: 1, score: 1, scoreBreakdown: 1, filterNotes: 1, status: 1 }).lean();
+    const byJob = new Map(apps.map((a: any) => [String(a.jobId), a]));
+    const withMatch = jobs.map((j) => {
+      const a: any = byJob.get(String(j._id));
+      const obj = typeof (j as any).toObject === 'function' ? (j as any).toObject() : j;
+      return a ? { ...obj, match: { score: a.score, breakdown: a.scoreBreakdown, filterNotes: a.filterNotes ?? [], status: a.status } } : obj;
+    });
+    res.json({ jobs: withMatch, total, count: jobs.length });
   }
 
   static async getJob(req: Request, res: Response) {
@@ -95,6 +144,7 @@ export class JobController {
     }
 
     const rawJobsToSave: RawJob[] = [];
+    const linkRows: string[] = [];
 
     // 1. Process URL
     if (url) {
@@ -148,7 +198,11 @@ export class JobController {
               const locIdx = headerRow.findIndex((h) => h.includes('location') || h.includes('city') || h.includes('remote'));
               const descIdx = headerRow.findIndex((h) => h.includes('desc') || h.includes('detail') || h.includes('summary'));
 
-              for (let i = 1; i < rows.length && i <= 100; i++) {
+              // A sheet that's just a list of links (no title column): treat every link as a job to apply to.
+              if (titleIdx < 0) {
+                linkRows.push(...extractUrls(rows.flat()));
+              }
+              for (let i = 1; titleIdx >= 0 && i < rows.length && i <= 100; i++) {
                 const row = rows[i] as any[];
                 if (!row || !row.length) continue;
                 const title = titleIdx >= 0 ? String(row[titleIdx] || '') : String(row[0] || '');
@@ -192,7 +246,11 @@ export class JobController {
       } else if (filename.endsWith('.csv') || file.mimetype.includes('csv') || file.mimetype.includes('text')) {
         const text = file.buffer.toString('utf-8');
         const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-        if (lines.length > 1) {
+        const header = (lines[0] ?? '').toLowerCase();
+        if (!/title|role|position/.test(header)) {
+          // Plain list of links (or links in any column without a title header).
+          linkRows.push(...extractUrls(lines));
+        } else if (lines.length > 1) {
           const header = lines[0].toLowerCase();
           const sep = header.includes(';') ? ';' : ',';
 
@@ -225,8 +283,11 @@ export class JobController {
       }
     }
 
+    const linkResults = linkRows.length ? await queueLinks(userId, linkRows.slice(0, 200)) : [];
+
     res.status(201).json({
-      importedCount: savedJobs.length,
+      linkResults,
+      importedCount: savedJobs.length + linkResults.filter((r) => r.status !== 'failed').length,
       jobs: savedJobs,
     });
   }

@@ -1,116 +1,134 @@
 import { Schema, model, type HydratedDocument, type Types } from 'mongoose';
 
+/**
+ * A small business JAVI might sell a monthly service to. Everything here is either from a real
+ * source (OpenStreetMap, the user's CSV, what the user typed) or computed by the audit/quote engines.
+ * No defaults invent facts about the business.
+ */
+export type LeadStatus = 'new' | 'contacted' | 'replied' | 'call_booked' | 'won' | 'lost';
+export type LeadSource = 'osm' | 'csv' | 'manual' | 'referral';
+export type Vertical = 'restaurant' | 'salon' | 'clinic' | 'shop' | 'school' | 'real_estate' | 'other';
+export type OfferId = 'website' | 'ordering' | 'booking' | 'whatsapp_automation' | 'workflow_automation' | 'mobile_app';
+export type Tier = 'good' | 'better' | 'best';
+
+export interface LeadContact {
+  kind: 'phone' | 'email' | 'whatsapp' | 'instagram' | 'facebook' | 'website' | 'other';
+  value: string;
+  name?: string;
+  /** A shop line / info@ address, as opposed to a person's own number. Outreach goes to business lines. */
+  isBusinessLine?: boolean;
+}
+
+export interface AuditFinding {
+  id: string;
+  title: string;
+  /** What JAVI actually saw, quoted or measured. */
+  evidence: string;
+  /** How the owner can confirm it themselves in under a minute. */
+  howToCheck: string;
+  severity: 'high' | 'medium' | 'low';
+  offer?: OfferId;
+}
+
+export interface LeadAudit {
+  ranAt: Date;
+  url?: string;
+  reachable?: boolean;
+  findings: AuditFinding[];
+  signals: Record<string, unknown>;
+  error?: string;
+}
+
+export interface QuoteTier {
+  tier: Tier;
+  setup: number;
+  monthly: number;
+  includes: string[];
+  recommended?: boolean;
+}
+
+export interface LeadQuote {
+  offer: OfferId;
+  createdAt: Date;
+  tiers: QuoteTier[];
+  floor: { setup: number; monthly: number };
+  cost: { setup: number; monthly: number };
+  monthlyValue?: number;
+  warnings: string[];
+  paymentOptions: Array<{ id: string; label: string; detail: string }>;
+}
+
+export interface LeadPitch {
+  id: string;
+  variant: 'observation' | 'question' | 'proof';
+  channel: 'email' | 'whatsapp';
+  subject?: string;
+  body: string;
+  waLink?: string;
+  polished?: boolean;
+  createdAt: Date;
+}
+
 export interface IBusinessLead {
   userId: Types.ObjectId;
+  status: LeadStatus;
+  source: LeadSource;
+  /** "node/123" | "way/456", unique per user, for OSM leads. */
+  osmId?: string;
+  referredBy?: string;
   name: string;
-  category: string;
-  address: string;
-  location: {
-    lat: number;
-    lng: number;
-  };
-  distanceKm: number;
-  rating?: number;
-  reviewsCount?: number;
-  websiteUrl?: string;
-  websiteAudit: {
-    hasWebsite: boolean;
-    mobileResponsive: boolean;
-    hasSsl: boolean;
-    techStack: string[];
-    issues: string[];
-  };
-  socialPresence: {
-    linkedinUrl?: string;
-    twitterUrl?: string;
-    instagramUrl?: string;
-    facebookUrl?: string;
-    notes: string[];
-  };
-  contacts: Array<{
-    name: string;
-    title: string;
-    email?: string;
-    phone?: string;
-    linkedinUrl?: string;
-  }>;
-  needsServices: boolean;
-  qualificationReason: string;
-  pitchSnippet: string;
-  sequence: Array<{
-    stepNumber: number;
-    channel: 'email' | 'whatsapp' | 'linkedin';
-    scheduledAt: Date;
-    status: 'pending' | 'sent' | 'replied' | 'paused';
-    subject?: string;
-    body: string;
-  }>;
-  stage: 'discovered' | 'qualified' | 'pitch_drafted' | 'sequence_active' | 'sequence_paused' | 'replied' | 'converted' | 'dismissed';
+  vertical: Vertical;
+  category?: string;
+  area?: string;
+  address?: string;
+  location?: { lat: number; lng: number };
+  website?: string;
+  openingHours?: string;
+  contacts: LeadContact[];
+  consent?: { given: boolean; at?: Date; channel?: string; note?: string };
+  /** The owner's own numbers (orders/day, average order, hours on WhatsApp...), keyed by catalog input id. */
+  valueInputs: Record<string, number>;
+  audit?: LeadAudit;
+  quote?: LeadQuote;
+  pitches: LeadPitch[];
+  notes: Array<{ text: string; at: Date }>;
+  lostReason?: string;
+  deal?: { offer: OfferId; tier: Tier; setup: number; monthly: number; startedAt: Date };
+  history: Array<{ from: LeadStatus | null; to: LeadStatus; at: Date; note?: string }>;
 }
+
+const opts = { _id: false } as const;
 
 const schema = new Schema<IBusinessLead>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    status: { type: String, enum: ['new', 'contacted', 'replied', 'call_booked', 'won', 'lost'], default: 'new' },
+    source: { type: String, enum: ['osm', 'csv', 'manual', 'referral'], required: true },
+    osmId: String,
+    referredBy: String,
     name: { type: String, required: true },
-    category: { type: String, required: true },
-    address: { type: String, default: '' },
-    location: {
-      lat: { type: Number, required: true },
-      lng: { type: Number, required: true },
-    },
-    distanceKm: { type: Number, default: 1 },
-    rating: { type: Number, default: 4.5 },
-    reviewsCount: { type: Number, default: 10 },
-    websiteUrl: { type: String },
-    websiteAudit: {
-      hasWebsite: { type: Boolean, default: true },
-      mobileResponsive: { type: Boolean, default: true },
-      hasSsl: { type: Boolean, default: true },
-      techStack: [{ type: String }],
-      issues: [{ type: String }],
-    },
-    socialPresence: {
-      linkedinUrl: String,
-      twitterUrl: String,
-      instagramUrl: String,
-      facebookUrl: String,
-      notes: [{ type: String }],
-    },
-    contacts: [
-      {
-        _id: false,
-        name: String,
-        title: String,
-        email: String,
-        phone: String,
-        linkedinUrl: String,
-      },
-    ],
-    needsServices: { type: Boolean, default: true },
-    qualificationReason: { type: String, default: '' },
-    pitchSnippet: { type: String, default: '' },
-    sequence: [
-      {
-        _id: false,
-        stepNumber: Number,
-        channel: { type: String, enum: ['email', 'whatsapp', 'linkedin'], default: 'email' },
-        scheduledAt: Date,
-        status: { type: String, enum: ['pending', 'sent', 'replied', 'paused'], default: 'pending' },
-        subject: String,
-        body: String,
-      },
-    ],
-    stage: {
-      type: String,
-      enum: ['discovered', 'qualified', 'pitch_drafted', 'sequence_active', 'sequence_paused', 'replied', 'converted', 'dismissed'],
-      default: 'qualified',
-    },
+    vertical: { type: String, enum: ['restaurant', 'salon', 'clinic', 'shop', 'school', 'real_estate', 'other'], default: 'other' },
+    category: String,
+    area: String,
+    address: String,
+    location: new Schema({ lat: Number, lng: Number }, opts),
+    website: String,
+    openingHours: String,
+    contacts: [new Schema({ kind: String, value: String, name: String, isBusinessLine: Boolean }, opts)],
+    consent: new Schema({ given: Boolean, at: Date, channel: String, note: String }, opts),
+    valueInputs: { type: Schema.Types.Mixed, default: {} },
+    audit: Schema.Types.Mixed,
+    quote: Schema.Types.Mixed,
+    pitches: { type: Schema.Types.Mixed, default: [] },
+    notes: [new Schema({ text: String, at: Date }, opts)],
+    lostReason: String,
+    deal: new Schema({ offer: String, tier: String, setup: Number, monthly: Number, startedAt: Date }, opts),
+    history: [new Schema({ from: String, to: String, at: Date, note: String }, opts)],
   },
   { timestamps: true },
 );
-
-schema.index({ userId: 1, stage: 1, createdAt: -1 });
-schema.index({ 'location.lat': 1, 'location.lng': 1 });
+schema.index({ userId: 1, status: 1, updatedAt: -1 });
+schema.index({ userId: 1, osmId: 1 }, { unique: true, partialFilterExpression: { osmId: { $type: 'string' } } });
 
 export type BusinessLeadDoc = HydratedDocument<IBusinessLead>;
 export const BusinessLead = model<IBusinessLead>('BusinessLead', schema);

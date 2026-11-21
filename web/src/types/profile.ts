@@ -1,4 +1,10 @@
-import { AVATAR_ANGELICA } from '@/assets/avatars';
+/**
+ * Mirrors server/src/models/profile.model.ts field for field.
+ * Fields the schema defaults (strings to '', arrays to []) are required here because GET /profile
+ * always returns them; everything else is optional and stays undefined until the user answers.
+ */
+
+export type Period = 'hour' | 'month' | 'year';
 
 export interface Bullet {
   id: string;
@@ -27,11 +33,50 @@ export interface EducationItem {
   grade?: string;
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  url?: string;
+  description?: string;
+  skills?: string[];
+  bullets: Bullet[];
+}
+
+export interface CertificationItem {
+  id: string;
+  name: string;
+  issuer?: string;
+  year?: string;
+}
+
+export interface Skill {
+  name: string;
+  years?: number;
+}
+
+export interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+export type LanguageProficiency = 'basic' | 'conversational' | 'fluent' | 'native';
+
+export interface LanguageSkill {
+  language: string;
+  proficiency: LanguageProficiency;
+}
+
 export interface SalaryExpectation {
   minimum: number;
   currency: string;
-  period: 'hour' | 'month' | 'year';
+  period: Period;
   negotiable: boolean;
+}
+
+export interface SalaryFloor {
+  amount?: number;
+  currency: string;
+  period: Period;
 }
 
 export interface Address {
@@ -43,13 +88,53 @@ export interface Address {
 }
 
 export interface EeoDisclosures {
-  gender: 'male' | 'female' | 'non_binary' | 'other' | 'decline';
-  raceEthnicity: 'hispanic_latino' | 'white' | 'black_african_american' | 'asian' | 'native_american' | 'two_or_more' | 'decline';
-  veteranStatus: 'veteran' | 'not_veteran' | 'decline';
-  disabilityStatus: 'yes' | 'no' | 'decline';
+  gender?: 'male' | 'female' | 'non_binary' | 'other' | 'decline';
+  raceEthnicity?: 'hispanic_latino' | 'white' | 'black_african_american' | 'asian' | 'native_american' | 'two_or_more' | 'decline';
+  veteranStatus?: 'veteran' | 'not_veteran' | 'decline';
+  disabilityStatus?: 'yes' | 'no' | 'decline';
 }
 
+export interface Rules {
+  dailySendCap: number;
+  approvalMode: 'review' | 'auto';
+  autoApproveMinScore: number;
+  sendingHours: { start: number; end: number; timezone: string };
+  weekdaysOnly: boolean;
+}
+
+export interface CareerPage {
+  url: string;
+  ats: 'greenhouse' | 'lever' | 'ashby' | 'workable' | 'smartrecruiters' | 'workday' | 'unsupported';
+  token?: string;
+  addedAt?: string;
+}
+
+export interface SavedAnswer {
+  key: string;
+  question: string;
+  answer: string;
+  reusable: boolean;
+  updatedAt?: string;
+}
+
+/** CV metadata. The server keeps the file path and extracted text to itself. */
+export interface CvMeta {
+  originalName?: string;
+  mime?: string;
+  uploadedAt?: string;
+  parseWarnings?: string[];
+}
+
+export type WorkAuthorization = 'authorized' | 'not_authorized';
+export type SecurityClearance = 'none' | 'confidential' | 'secret' | 'top_secret' | 'other';
+export type RemotePreference = 'remote' | 'hybrid' | 'onsite' | 'any';
+export type EducationLevel = 'high_school' | 'associate' | 'bachelor' | 'master' | 'doctorate' | 'bootcamp' | 'self_taught';
+
 export interface UserProfile {
+  _id?: string;
+  /** Only POST /profile/verify sets 'verified'. */
+  status: 'draft' | 'verified';
+
   // Personal & Contact
   firstName: string;
   lastName: string;
@@ -58,210 +143,100 @@ export interface UserProfile {
   email: string;
   phone: string;
   pronouns?: string;
-  address: Address;
-  location: string;
-  avatarUrl?: string;
+  address?: Address;
+  /** Derived on the server from address when not set. */
+  location?: string;
+  avatarUrl: string;
 
-  // Online Presence & Socials
+  // Online Presence
   linkedinUrl: string;
   githubUrl?: string;
   portfolioUrl?: string;
   twitterUrl?: string;
+  links: ProfileLink[];
 
-  // Work Authorization & Legal Eligibility (ATS-critical)
-  workAuthorization: 'authorized' | 'not_authorized';
-  requiresSponsorship: boolean;
-  futureSponsorship: boolean;
-  securityClearance?: 'none' | 'confidential' | 'secret' | 'top_secret' | 'other';
-  willingToRelocate: boolean;
-  noticePeriod: string;
+  // Work Authorization & Legal (no defaults: unanswered stays unset)
+  workAuthorization?: WorkAuthorization;
+  requiresSponsorship?: boolean;
+  futureSponsorship?: boolean;
+  securityClearance?: SecurityClearance;
+  willingToRelocate?: boolean;
+  noticePeriod?: string;
   earliestStartDate?: string;
 
   // Target Roles & Preferences
   targetRoles: string[];
   locations: string[];
-  remotePreference: 'remote' | 'hybrid' | 'onsite' | 'any';
-  salaryExpectation: SalaryExpectation;
-  yearsOfExperience: number;
+  remotePreference: RemotePreference;
+  salaryFloor?: SalaryFloor;
+  salaryExpectation?: SalaryExpectation;
+  yearsOfExperience?: number;
+  inferredLevel: string;
+  validatedLevel: string;
+  industry: string;
+  specificTitle: string;
   currentCompany?: string;
   currentTitle?: string;
 
-  // Background, Experience & Education
-  summary: string;
+  // Background & Skills
+  summary?: string;
   elevatorPitch?: string;
-  highestEducationLevel: 'high_school' | 'associate' | 'bachelor' | 'master' | 'doctorate' | 'bootcamp' | 'self_taught';
+  highestEducationLevel?: EducationLevel;
+  skills: Skill[];
   primarySkills: string[];
   secondarySkills: string[];
   toolsAndFrameworks: string[];
+  languages: LanguageSkill[];
   experience: ExperienceItem[];
   education: EducationItem[];
+  projects: ProjectItem[];
+  certifications: CertificationItem[];
 
-  // Voluntary EEO Disclosures
-  eeo: EeoDisclosures;
+  eeo?: EeoDisclosures;
+
+  // Automation
+  blockedCompanies: string[];
+  rules: Rules;
+  answerBank: SavedAnswer[];
+  careerPages: CareerPage[];
+  cv?: CvMeta;
 }
 
 export const EMPTY_PROFILE: UserProfile = {
+  status: 'draft',
   firstName: '',
   lastName: '',
   fullName: '',
   headline: '',
   email: '',
   phone: '',
-  pronouns: '',
-  address: {
-    street: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: '',
-  },
-  location: '',
-
+  avatarUrl: '',
   linkedinUrl: '',
-  githubUrl: '',
-  portfolioUrl: '',
-  twitterUrl: '',
-
-  workAuthorization: 'authorized',
-  requiresSponsorship: false,
-  futureSponsorship: false,
-  securityClearance: 'none',
-  willingToRelocate: false,
-  noticePeriod: '',
-  earliestStartDate: '',
-
+  links: [],
   targetRoles: [],
   locations: [],
-  remotePreference: 'remote',
-  salaryExpectation: {
-    minimum: 0,
-    currency: 'USD',
-    period: 'year',
-    negotiable: true,
-  },
-  yearsOfExperience: 0,
-  currentCompany: '',
-  currentTitle: '',
-
-  summary: '',
-  elevatorPitch: '',
-  highestEducationLevel: 'bachelor',
+  remotePreference: 'any',
+  inferredLevel: '',
+  validatedLevel: '',
+  industry: '',
+  specificTitle: '',
+  skills: [],
   primarySkills: [],
   secondarySkills: [],
   toolsAndFrameworks: [],
+  languages: [],
   experience: [],
   education: [],
-
-  eeo: {
-    gender: 'decline',
-    raceEthnicity: 'decline',
-    veteranStatus: 'decline',
-    disabilityStatus: 'decline',
+  projects: [],
+  certifications: [],
+  blockedCompanies: [],
+  rules: {
+    dailySendCap: 15,
+    approvalMode: 'review',
+    autoApproveMinScore: 0.75,
+    sendingHours: { start: 8, end: 18, timezone: 'UTC' },
+    weekdaysOnly: true,
   },
-};
-
-export const DEFAULT_PROFILE: UserProfile = {
-  firstName: 'Angelica',
-  lastName: 'Greeze',
-  fullName: 'Angelica Greeze',
-  headline: 'UI / UX Designer',
-  email: 'angelica.greeze@javi.ai',
-  phone: '+1 (555) 234-5678',
-  pronouns: 'she/her',
-  avatarUrl: AVATAR_ANGELICA,
-  address: {
-    street: '124 Design Blvd',
-    city: 'New York',
-    state: 'NY',
-    postalCode: '10001',
-    country: 'United States',
-  },
-  location: 'New York, NY (Open to Remote / Relocation)',
-
-  linkedinUrl: 'https://linkedin.com/in/angelica-greeze-design',
-  githubUrl: 'https://github.com/angelicagreeze',
-  portfolioUrl: 'https://angelicagreeze.design',
-  twitterUrl: 'https://x.com/angelica_design',
-
-  workAuthorization: 'authorized',
-  requiresSponsorship: false,
-  futureSponsorship: false,
-  securityClearance: 'none',
-  willingToRelocate: true,
-  noticePeriod: 'Available For Work',
-  earliestStartDate: 'Immediately',
-
-  targetRoles: ['UI / UX Designer', 'UI Designer', 'Product Designer'],
-  locations: ['Remote', 'New York, NY', 'San Francisco, CA', 'London, UK'],
-  remotePreference: 'remote',
-  salaryExpectation: {
-    minimum: 115000,
-    currency: 'USD',
-    period: 'year',
-    negotiable: true,
-  },
-  yearsOfExperience: 5,
-  currentCompany: 'Ideologist Team',
-  currentTitle: 'UI / UX Designer',
-
-  summary:
-    'Creative UI / UX Designer passionate about building intuitive digital systems, design libraries, and user experiences across web and mobile platforms.',
-  elevatorPitch:
-    'I help design high-impact user experiences, design systems, and delightful digital interfaces.',
-  highestEducationLevel: 'bachelor',
-  primarySkills: ['UI', 'Ux', 'Website Design', 'Mobile Design', 'Research', 'Interaction'],
-  secondarySkills: ['Figma', 'Prototyping', 'Design Systems', 'User Testing', 'Wireframing'],
-  toolsAndFrameworks: ['Figma', 'Adobe XD', 'Sketch', 'Principle', 'HTML/CSS'],
-  experience: [
-    {
-      id: 'exp-1',
-      company: 'Ideologist Team',
-      title: 'UI / UX Designer',
-      location: 'Remote',
-      start: 'Jan 2022',
-      end: 'Present',
-      current: true,
-      bullets: [
-        { id: 'b1', text: 'Lead design systems and UX architecture for next-gen digital platforms.' },
-        { id: 'b2', text: 'Designed high-conversion web flows and cross-platform mobile interfaces.' },
-      ],
-    },
-    {
-      id: 'exp-2',
-      company: 'Tigabatang',
-      title: 'UI Designer',
-      location: 'Fulltime',
-      start: 'Jan 2022',
-      end: 'Present',
-      current: false,
-      bullets: [
-        { id: 'b3', text: 'Created modular UI components, icons, and interactive prototypes.' },
-      ],
-    },
-  ],
-  education: [
-    {
-      id: 'edu-1',
-      institution: 'Oxford University',
-      degree: 'Student - Software Engienering',
-      field: 'Software Engineering',
-      start: '2018',
-      end: '2021',
-      grade: 'First Class',
-    },
-    {
-      id: 'edu-2',
-      institution: 'Oxford Vocational High School',
-      degree: 'Student - Software Engienering',
-      field: 'Software Engineering',
-      start: '2015',
-      end: '2015',
-    },
-  ],
-  eeo: {
-    gender: 'female',
-    raceEthnicity: 'black_african_american',
-    veteranStatus: 'not_veteran',
-    disabilityStatus: 'no',
-  },
+  answerBank: [],
+  careerPages: [],
 };

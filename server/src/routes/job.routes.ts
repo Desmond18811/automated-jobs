@@ -11,6 +11,7 @@ const upload = multer({
 
 router.get('/', asyncHandler(JobController.list));
 router.post('/manual', asyncHandler(JobController.manual));
+router.post('/links', asyncHandler(JobController.links));
 router.post('/import', upload.single('file'), asyncHandler(JobController.importJobs));
 router.get('/:id', asyncHandler(JobController.getJob));
 

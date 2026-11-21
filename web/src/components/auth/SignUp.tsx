@@ -1,325 +1,348 @@
-import { useState, type FC, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GoogleLogo, LinkedInLogo } from '@/assets/logos';
-import { EyeIcon, EyeOffIcon } from '@/assets/icons';
-import { AuthSlideshow } from './AuthSlideshow';
-import { useUserProfile } from '@/context/ProfileContext';
-import { authApi } from '@/api';
+import { useState, useEffect, type FC, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { GoogleLogo } from '@/assets/logos';
+import { EyeIcon, EyeOffIcon, CheckIcon } from '@/assets/icons';
+import { AuthSplitLayout } from './AuthSplitLayout';
+import { HandDrawnUnderline } from './HandDrawnUnderline';
+import { authApi, tokenStorage } from '@/api';
 
 export const SignUp: FC = () => {
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
-  const initialEmail = searchParams.get('email') || '';
-  const { updateProfile } = useUserProfile();
-
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState(initialEmail || 'you@example.com');
-  const [password, setPassword] = useState('password123');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // If already authenticated with Clerk or local token, route them to onboarding
+  useEffect(() => {
+    const clerk = (window as any).Clerk;
+    if (clerk?.user || tokenStorage.hasToken()) {
+      nav('/setup', { replace: true });
+    }
+  }, [nav]);
+
+  // Password validation indicators
+  const hasMinLength = password.length >= 8;
+  const hasSpecialOrNumber = /[0-9!@#$%^&*(),.?":{}|<>]/.test(password);
+
   const handleSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
+
+    if (!hasMinLength) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await authApi.register({
-        email,
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await authApi.register({
+        email: cleanEmail,
         password,
-        name: `${firstName} ${lastName}`.trim(),
+        name: name.trim(),
       });
-      updateProfile({
-        firstName,
-        lastName,
-        fullName: `${firstName} ${lastName}`.trim(),
-        email,
-      });
-      nav('/setup');
+
+      // Navigate to OTP verification page with candidate email
+      nav(`/verify-otp?email=${encodeURIComponent(cleanEmail)}&name=${encodeURIComponent(name.trim())}`);
     } catch (err: any) {
-      console.warn('Register attempt:', err);
+      console.warn('Registration attempt:', err);
       setError(err?.message || 'Registration failed. Please check your details.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleAuth = () => {
-    if ((window as any).Clerk?.openSignUp) {
-      (window as any).Clerk.openSignUp({ redirectUrl: '/setup' });
-    } else {
-      handleSubmit();
+  const handleGoogleAuth = async () => {
+    const clerk = (window as any).Clerk;
+    if (clerk) {
+      if (clerk.session || clerk.user) {
+        nav('/setup');
+        return;
+      }
+      if (clerk.openSignUp) {
+        try {
+          await clerk.openSignUp({ redirectUrl: '/setup' });
+          return;
+        } catch (e: any) {
+          console.warn('Clerk openSignUp fallback', e);
+          if (
+            e?.code === 'cannot_render_single_session_enabled' ||
+            String(e?.message || e).includes('single_session') ||
+            clerk.user ||
+            clerk.session
+          ) {
+            nav('/setup');
+            return;
+          }
+        }
+      }
     }
+    handleSubmit();
   };
 
   return (
-    <div
-      data-screen-label="Sign up"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        padding: '96px 150px 40px',
-        boxSizing: 'border-box',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 960,
-          height: 590,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
-          background: 'rgba(255,255,255,.95)',
-          border: '1px solid #ececef',
-          borderRadius: 22,
-          overflow: 'hidden',
-          boxShadow: '0 24px 60px rgba(40,80,160,.12)',
-        }}
-      >
-        {/* Left gradient side with interactive candidate stories slideshow */}
-        <AuthSlideshow />
-
-        {/* Right form side */}
-        <div
+    <AuthSplitLayout>
+      <div data-screen-label="Sign up" style={{ width: '100%' }}>
+        {/* Main Title & Subtitle */}
+        <h1
           style={{
-            padding: '32px 38px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 12,
-            overflowY: 'auto',
+            margin: '0 0 8px',
+            fontSize: 32,
+            fontWeight: 700,
+            letterSpacing: '-0.025em',
+            color: '#101828',
           }}
         >
-          <div>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-.6px' }}>
-              Get started with JAVI
-            </h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6a6a72' }}>
-              Create an account in a few minutes
-            </p>
-          </div>
+          Start your 14-day trial
+        </h1>
+        <p
+          style={{
+            margin: '0 0 26px',
+            fontSize: 14,
+            color: '#667085',
+            lineHeight: '20px',
+          }}
+        >
+          Get started immediately. No credit card required, cancel anytime.
+        </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button
-              type="button"
-              onClick={handleGoogleAuth}
-              style={{
-                height: 38,
-                border: '1px solid #e6e6ea',
-                borderRadius: 9,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#3a3a40',
-                background: '#fff',
-                cursor: 'pointer',
-                fontFamily: 'Montserrat, sans-serif',
-              }}
-            >
-              <GoogleLogo size={18} />
-              Google
-            </button>
-            <button
-              type="button"
-              onClick={handleGoogleAuth}
-              style={{
-                height: 38,
-                border: '1px solid #e6e6ea',
-                borderRadius: 9,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#3a3a40',
-                background: '#fff',
-                cursor: 'pointer',
-                fontFamily: 'Montserrat, sans-serif',
-              }}
-            >
-              <LinkedInLogo size={18} />
-              LinkedIn
-            </button>
-          </div>
+        {/* Google Social Sign Up Button */}
+        <button
+          type="button"
+          onClick={handleGoogleAuth}
+          style={{
+            width: '100%',
+            height: 44,
+            border: '1px solid #d0d5dd',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            color: '#344054',
+            background: '#ffffff',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+        >
+          <GoogleLogo size={18} />
+          Sign up with Google
+        </button>
 
+        {/* Divider "or" */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            margin: '18px 0',
+            color: '#667085',
+            fontSize: 13,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: '#eaecf0' }} />
+          <span>or continue with email</span>
+          <div style={{ flex: 1, height: 1, background: '#eaecf0' }} />
+        </div>
+
+        {/* Error Alert */}
+        {error && (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              margin: '2px 0',
-              color: '#a0a0aa',
-              fontSize: 11,
+              background: '#fef3f2',
+              border: '1px solid #fee4e2',
+              color: '#d92d20',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 12.5,
+              lineHeight: '18px',
+              marginBottom: 16,
             }}
           >
-            <div style={{ flex: 1, height: 1, background: '#eee' }} />
-            <span>or sign up with email</span>
-            <div style={{ flex: 1, height: 1, background: '#eee' }} />
+            {error}
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Full Name */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>Full name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Amaka Okafor"
+              required
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                height: 44,
+                border: '1px solid #d0d5dd',
+                borderRadius: 8,
+                padding: '0 14px',
+                fontSize: 14,
+                outline: 'none',
+                color: '#101828',
+                background: '#ffffff',
+                boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+                transition: 'border-color 0.15s ease',
+              }}
+              onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+              onBlur={(e) => (e.target.style.borderColor = '#d0d5dd')}
+            />
           </div>
 
-          {error && (
-            <div
+          {/* Email */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              required
               style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#dc2626',
+                width: '100%',
+                boxSizing: 'border-box',
+                height: 44,
+                border: '1px solid #d0d5dd',
                 borderRadius: 8,
-                padding: '8px 12px',
-                fontSize: 11.5,
-                lineHeight: '16px',
+                padding: '0 14px',
+                fontSize: 14,
+                outline: 'none',
+                color: '#101828',
+                background: '#ffffff',
+                boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+                transition: 'border-color 0.15s ease',
               }}
-            >
-              {error}
-            </div>
-          )}
+              onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+              onBlur={(e) => (e.target.style.borderColor = '#d0d5dd')}
+            />
+          </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>First name *</label>
-                <input
-                  type="text"
-                  required
-                  value={firstName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setFirstName(e.target.value)}
-                  placeholder="Ada"
-                  style={{
-                    height: 36,
-                    border: '1px solid #e6e6ea',
-                    borderRadius: 8,
-                    padding: '0 10px',
-                    fontSize: 12.5,
-                    outline: 'none',
-                    fontFamily: 'Montserrat, sans-serif',
-                  }}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Last name *</label>
-                <input
-                  type="text"
-                  required
-                  value={lastName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
-                  //    placeholder="Okafor"
-                  style={{
-                    height: 36,
-                    border: '1px solid #e6e6ea',
-                    borderRadius: 8,
-                    padding: '0 10px',
-                    fontSize: 12.5,
-                    outline: 'none',
-                    fontFamily: 'Montserrat, sans-serif',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Email address *</label>
+          {/* Password */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>Password</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
-                type="email"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Create a strong password"
                 required
-                value={email}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                placeholder="you@email.com"
                 style={{
-                  height: 36,
-                  border: '1px solid #e6e6ea',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  height: 44,
+                  border: '1px solid #d0d5dd',
                   borderRadius: 8,
-                  padding: '0 10px',
-                  fontSize: 12.5,
+                  padding: '0 42px 0 14px',
+                  fontSize: 14,
                   outline: 'none',
-                  fontFamily: 'Montserrat, sans-serif',
+                  color: '#101828',
+                  background: '#ffffff',
+                  boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+                  transition: 'border-color 0.15s ease',
                 }}
+                onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+                onBlur={(e) => (e.target.style.borderColor = '#d0d5dd')}
               />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((prev) => !prev)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#667085',
+                }}
+              >
+                {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+              </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Password *</label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-                  placeholder="Choose a password"
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    height: 36,
-                    border: '1px solid #e6e6ea',
-                    borderRadius: 8,
-                    padding: '0 36px 0 10px',
-                    fontSize: 12.5,
-                    outline: 'none',
-                    fontFamily: 'Montserrat, sans-serif',
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: showPassword ? '#2f6ef0' : '#8e8e93',
-                  }}
-                >
-                  {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
-                </button>
+            {/* Password Validation Hints (Matching Image Style) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: hasMinLength ? '#027a48' : '#98a2b3' }}>
+                <CheckIcon size={13} color={hasMinLength ? '#12b76a' : '#d0d5dd'} />
+                <span>Must be at least 8 characters</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: hasSpecialOrNumber ? '#027a48' : '#98a2b3' }}>
+                <CheckIcon size={13} color={hasSpecialOrNumber ? '#12b76a' : '#d0d5dd'} />
+                <span>Must contain a number or special character</span>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                height: 42,
-                background: '#0b0b0c',
-                color: '#fff',
-                borderRadius: 8,
-                border: 0,
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: loading ? 'wait' : 'pointer',
-                marginTop: 6,
-                boxShadow: '0 4px 14px rgba(0,0,0,.12)',
-                fontFamily: 'Montserrat, sans-serif',
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? 'Creating account...' : 'Continue to Extensive Profile Setup →'}
-            </button>
-          </form>
-
-          <div style={{ textAlign: 'center', fontSize: 11.5, color: '#6a6a72', marginTop: 2 }}>
-            Already have an account?{' '}
-            <Link to="/signin" style={{ color: '#2f6ef0', fontWeight: 600 }}>
-              Sign in
-            </Link>
           </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              height: 44,
+              background: '#101828',
+              color: '#ffffff',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: loading ? 'wait' : 'pointer',
+              marginTop: 6,
+              boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+              opacity: loading ? 0.7 : 1,
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#1d2939')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#101828')}
+          >
+            {loading ? 'Setting up your trial...' : 'Get started immediately'}
+          </button>
+        </form>
+
+        {/* Bottom Switcher */}
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: 13.5,
+            color: '#667085',
+            marginTop: 22,
+          }}
+        >
+          <span>Already have an account? </span>
+          <Link
+            to="/signin"
+            style={{
+              color: '#101828',
+              fontWeight: 700,
+              textDecoration: 'none',
+              position: 'relative',
+              display: 'inline-block',
+            }}
+          >
+            Log in
+            <HandDrawnUnderline width="105%" color="#101828" />
+          </Link>
         </div>
       </div>
-    </div>
+    </AuthSplitLayout>
   );
 };
+export default SignUp;

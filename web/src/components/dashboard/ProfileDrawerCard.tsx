@@ -7,7 +7,7 @@ import {
   PencilIcon,
   UsersIcon,
 } from '@/assets/icons';
-import { AVATAR_ANGELICA } from '@/assets/avatars';
+import { AVATAR_ADA } from '@/assets/avatars';
 
 interface ProfileDrawerCardProps {
   onEditProfile: () => void;
@@ -16,68 +16,20 @@ interface ProfileDrawerCardProps {
 export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile }) => {
   const { profile } = useUserProfile();
 
-  const fullName =
-    profile.fullName ||
-    [profile.firstName, profile.lastName].filter(Boolean).join(' ') ||
-    'Angelica Greeze';
-  const headline = profile.headline || profile.targetRoles?.[0] || 'UI / UX Designer';
-
-  // Fallback experiences matching reference image
-  const experiences =
-    profile.experience && profile.experience.length > 0
-      ? profile.experience.slice(0, 3)
-      : [
-          {
-            title: 'UI / UX Designer',
-            company: 'Ideologist Team',
-            location: 'Remote',
-            start: 'Jan 2022',
-            end: 'Present',
-            metaDuration: '8 Mos',
-            current: true,
-          },
-          {
-            title: 'UI Designer',
-            company: 'Tigabatang',
-            location: 'Fulltime',
-            start: 'Jan 2022',
-            end: 'Present',
-            metaDuration: '8 Mos',
-            current: false,
-          },
-        ];
-
-  // Fallback educations matching reference image
-  const educations =
-    profile.education && profile.education.length > 0
-      ? profile.education.slice(0, 2)
-      : [
-          {
-            institution: 'Oxford University',
-            degree: 'Student - Software Engienering',
-            start: '2018',
-            end: '2021',
-            metaDuration: '3 Yrs',
-          },
-          {
-            institution: 'Oxford Vocational High School',
-            degree: 'Student - Software Engienering',
-            start: '2015',
-            end: '2015',
-            metaDuration: '3 Yrs',
-          },
-        ];
-
-  // Skills
-  const rawSkills = [
-    ...(profile.primarySkills || []),
-    ...(profile.secondarySkills || []),
-    ...(profile.toolsAndFrameworks || []),
-  ];
-  const skills =
-    rawSkills.length > 0
-      ? Array.from(new Set(rawSkills)).slice(0, 8)
-      : ['UI', 'Ux', 'Website Design', 'Mobile Design', 'Research', 'Interaction'];
+  // Only real profile data: an empty section says so instead of showing placeholder people.
+  const fullName = profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Your name';
+  const headline = profile.headline || profile.targetRoles?.[0] || '';
+  const experiences = (profile.experience ?? []).slice(0, 3);
+  const educations = (profile.education ?? []).slice(0, 2);
+  const skills = Array.from(new Set([...(profile.primarySkills || []), ...(profile.secondarySkills || []), ...(profile.toolsAndFrameworks || [])])).slice(0, 8);
+  const empty = (what: string) => (
+    <div style={{ fontSize: 12, color: '#a1a1aa' }}>
+      No {what} yet.{' '}
+      <span style={{ color: '#2563eb', cursor: 'pointer' }} onClick={onEditProfile}>
+        Add
+      </span>
+    </div>
+  );
 
   return (
     <div
@@ -152,7 +104,7 @@ export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile })
           }}
         >
           <img
-            src={profile.avatarUrl || AVATAR_ANGELICA}
+            src={profile.avatarUrl || AVATAR_ADA}
             alt={fullName}
             style={{
               width: '100%',
@@ -241,10 +193,11 @@ export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile })
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {experiences.length === 0 && empty('experience')}
             {experiences.map((exp: any, idx: number) => {
               const iconBg = idx === 0 ? '#ff6338' : '#4f86f7';
               const dateRange = [exp.start, exp.end || (exp.current ? 'Present' : '')].filter(Boolean).join(' - ');
-              const dateStr = [dateRange, exp.metaDuration || (idx === 0 ? '8 Mos' : '8 Mos')].filter(Boolean).join(' · ');
+              const dateStr = dateRange;
 
               return (
                 <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -291,9 +244,10 @@ export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile })
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {educations.length === 0 && empty('education')}
             {educations.map((edu: any, idx: number) => {
               const dateRange = [edu.start, edu.end].filter(Boolean).join(' - ');
-              const dateStr = [dateRange, edu.metaDuration || '3 Yrs'].filter(Boolean).join(' · ');
+              const dateStr = dateRange;
 
               return (
                 <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -316,7 +270,7 @@ export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile })
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#18181b' }}>{edu.institution}</div>
-                    <div style={{ fontSize: 11.5, color: '#71717a' }}>{edu.degree || edu.field || 'Student - Software Engienering'}</div>
+                    <div style={{ fontSize: 11.5, color: '#71717a' }}>{[edu.degree, edu.field].filter(Boolean).join(' · ')}</div>
                     {dateStr && <div style={{ fontSize: 10.5, color: '#a1a1aa', marginTop: 2 }}>{dateStr}</div>}
                   </div>
                 </div>
@@ -335,6 +289,7 @@ export const ProfileDrawerCard: FC<ProfileDrawerCardProps> = ({ onEditProfile })
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {skills.length === 0 && empty('skills')}
             {skills.map((skill: string, idx: number) => (
               <span
                 key={idx}

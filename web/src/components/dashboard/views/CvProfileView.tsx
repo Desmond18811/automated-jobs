@@ -46,10 +46,10 @@ export const CvProfileView: FC = () => {
     }
   };
 
-  const handleVerify = async (key: string, setLocalState: (v: boolean) => void) => {
+  const handleVerify = async (_key: string, setLocalState: (v: boolean) => void) => {
     setLocalState(true);
     try {
-      await profileApi.verify(key);
+      await profileApi.verify();
     } catch (e) {
       console.warn('Verification save deferred:', e);
     }

@@ -2,9 +2,11 @@ import { useState, type FC, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AVATAR_ADA, AVATAR_USER_2, AVATAR_USER_3 } from '@/assets/avatars';
 import { CheckIcon, MailIcon } from '@/assets/icons';
+import { useIsMobile } from '@/hooks/useStageScale';
 
 export const Waitlist: FC = () => {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
   const [secureLink, setSecureLink] = useState('');
@@ -19,20 +21,23 @@ export const Waitlist: FC = () => {
   };
 
   const handleOpenInvite = () => {
-    nav(secureLink || `/setup?email=${encodeURIComponent(email || 'you@example.com')}`);
+    nav(secureLink || `/setup?email=${encodeURIComponent(email || 'amaka.okafor@example.com')}`);
   };
 
   return (
     <div
       data-screen-label="Waitlist"
+      className="jj-page-fade"
       style={{
-        position: 'absolute',
-        inset: 0,
-        paddingTop: 40,
+        position: isMobile ? 'relative' : 'absolute',
+        inset: isMobile ? undefined : 0,
+        width: '100%',
+        padding: isMobile ? '28px 16px 48px' : '40px 20px 30px',
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: isMobile ? 'flex-start' : 'center',
         textAlign: 'center',
         overflowY: 'auto',
       }}
@@ -49,6 +54,7 @@ export const Waitlist: FC = () => {
           border: '1px solid #ececef',
           borderRadius: 999,
           padding: '5px 12px 5px 8px',
+          animation: 'jj-hero-fade-down 0.75s cubic-bezier(0.16, 1, 0.3, 1) 0.05s backwards',
         }}
       >
         <span
@@ -58,6 +64,7 @@ export const Waitlist: FC = () => {
             borderRadius: '50%',
             background: '#2fc26b',
             boxShadow: '0 0 0 3px rgba(47,194,107,.18)',
+            animation: 'jj-pulse-dot 2.2s infinite ease-in-out',
           }}
         />
         Early access · Batch 04 opening now
@@ -65,10 +72,11 @@ export const Waitlist: FC = () => {
       <h2
         style={{
           margin: '14px 0 0',
-          fontSize: 36,
-          lineHeight: '42px',
+          fontSize: isMobile ? 27 : 36,
+          lineHeight: isMobile ? '33px' : '42px',
           fontWeight: 800,
           letterSpacing: '-1.2px',
+          animation: 'jj-hero-fade-up 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.12s backwards',
         }}
       >
         Get Javi before
@@ -82,38 +90,41 @@ export const Waitlist: FC = () => {
           lineHeight: '20px',
           color: '#55555c',
           maxWidth: 420,
+          animation: 'jj-hero-fade-up 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.22s backwards',
         }}
       >
         We're letting candidates in batch by batch. Enter your email to receive an instant invitation link.
       </p>
 
       <div
+        className="jj-animated-card"
         style={{
-          width: 500,
-          maxWidth: '92vw',
+          width: '100%',
+          maxWidth: 480,
           background: 'rgba(255,255,255,.95)',
           border: '1px solid #ececef',
           borderRadius: 20,
-          padding: 24,
+          padding: isMobile ? '20px 18px' : 24,
           boxSizing: 'border-box',
           boxShadow: '0 20px 50px rgba(40,80,160,.12)',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
           textAlign: 'left',
+          animation: 'jj-card-slow-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.28s backwards',
         }}
       >
         {!joined ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: '#3a3a40' }}>Work or personal email</div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8 }}>
               <input
                 value={email}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') join();
                 }}
-                placeholder="you@email.com"
+                placeholder="amaka.okafor@example.com"
                 style={{
                   flex: 1,
                   height: 42,
@@ -129,7 +140,7 @@ export const Waitlist: FC = () => {
                 type="button"
                 onClick={join}
                 style={{
-                  height: 44,
+                  height: 42,
                   padding: '0 20px',
                   borderRadius: 10,
                   background: '#0b0b0c',
@@ -138,6 +149,7 @@ export const Waitlist: FC = () => {
                   fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   boxShadow: '0 6px 16px rgba(0,0,0,.15)',
                   border: 0,
                   cursor: 'pointer',
@@ -152,12 +164,12 @@ export const Waitlist: FC = () => {
                 <span
                   key={t}
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: 500,
                     color: '#3a3a40',
                     background: '#f4f4f6',
                     borderRadius: 999,
-                    padding: '4px 10px',
+                    padding: '3px 9px',
                   }}
                 >
                   {t}
@@ -221,7 +233,7 @@ export const Waitlist: FC = () => {
                 <div style={{ fontSize: 12, color: '#444' }}>
                   <strong>Subject:</strong> Your early access invitation to Javi is ready
                 </div>
-                <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: '18px', color: '#555' }}>
+                <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: '18px', color: '#555' }}>
                   Hello! Your spot in Javi Batch 04 is confirmed. Use your unique, secure onboarding link below to configure your comprehensive profile and activate your automated applying dashboard.
                 </p>
                 <div
@@ -231,7 +243,7 @@ export const Waitlist: FC = () => {
                     borderRadius: 8,
                     padding: '8px 10px',
                     fontFamily: 'monospace',
-                    fontSize: 10.5,
+                    fontSize: 10,
                     color: '#1e40af',
                     wordBreak: 'break-all',
                     userSelect: 'all',
@@ -251,7 +263,7 @@ export const Waitlist: FC = () => {
                   color: '#fff',
                   border: 0,
                   borderRadius: 10,
-                  fontSize: 13,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',

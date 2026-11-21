@@ -11,6 +11,7 @@ import { notify } from '../services/notification.service';
 import { Profile } from '../models/profile.model';
 import { checkSend, releaseDailySlot, reserveDailySlot } from '../services/safety.service';
 import { oneOffAnswers, openTask } from '../services/task.service';
+import { Task } from '../models/task.model';
 import { enqueueDelivery } from '../queues';
 
 /** Shared by the "send" queue (email, assisted) and the "browser" queue (forms). */
@@ -78,7 +79,9 @@ export async function deliverProcessor(job: Job<{ applicationId: string }>) {
   }
 
   if (result.status === 'needs_user') {
-    const task = await openTask({
+    // Live sessions already opened (and messaged about) the task they were waiting on.
+    const existing = result.taskId ? await Task.findById(result.taskId) : null;
+    const task = existing ?? await openTask({
       userId,
       applicationId: app.id,
       reason: result.reason,

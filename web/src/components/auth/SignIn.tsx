@@ -1,281 +1,454 @@
-import { useState, type FC, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { GoogleLogo, LinkedInLogo } from '@/assets/logos';
+import { useState, useEffect, type FC, type FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { GoogleLogo } from '@/assets/logos';
 import { EyeIcon, EyeOffIcon } from '@/assets/icons';
-import { AuthSlideshow } from './AuthSlideshow';
-import { authApi } from '@/api';
+import { AuthSplitLayout } from './AuthSplitLayout';
+import { HandDrawnUnderline } from './HandDrawnUnderline';
+import { GoogleAuthModal } from './GoogleAuthModal';
+import { authApi, authStateStorage, getRouteForStage, tokenStorage } from '@/api';
+import { useUserProfile } from '@/context/ProfileContext';
 
 export const SignIn: FC = () => {
   const nav = useNavigate();
-  const [email, setEmail] = useState('you@example.com');
-  const [password, setPassword] = useState('password123');
+  const [searchParams] = useSearchParams();
+  const { profile } = useUserProfile();
+
+  const [email, setEmail] = useState<string>(() => {
+    return searchParams.get('email') || authStateStorage.getLastEmail() || '';
+  });
+
+  const [userName, setUserName] = useState<string>(() => {
+    return (
+      searchParams.get('name') ||
+      authStateStorage.getLastName() ||
+      profile.firstName ||
+      (profile.fullName ? profile.fullName.split(' ')[0] : '') ||
+      ''
+    );
+  });
+
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+
+  // If already authenticated with a valid token or Clerk session, route them immediately
+  useEffect(() => {
+    let mounted = true;
+
+    const checkExistingAuth = async () => {
+      const clerk = (window as any).Clerk;
+      if (!tokenStorage.hasToken() && clerk?.session) {
+        try {
+          const clerkToken = await clerk.session.getToken();
+          if (clerkToken && mounted) {
+            tokenStorage.set(clerkToken);
+          }
+        } catch {}
+      }
+
+      if (tokenStorage.hasToken()) {
+        try {
+          const me = await authApi.getMe();
+          if (me?.email && mounted) {
+            authStateStorage.saveSession(me);
+            const target = getRouteForStage(me.onboardingStage, me.email, me.name);
+            nav(target, { replace: true });
+            return;
+          }
+        } catch (err: any) {
+          if (err?.status === 401) {
+            tokenStorage.clear();
+          } else if (clerk?.user && mounted) {
+            // Server may be offline, but Clerk user is signed in
+            nav('/dash', { replace: true });
+            return;
+          }
+        }
+      } else if (clerk?.user && mounted) {
+        nav('/dash', { replace: true });
+      }
+    };
+
+    checkExistingAuth();
+
+    // Re-check when Clerk loads or session changes
+    const clerk = (window as any).Clerk;
+    if (clerk?.addListener) {
+      const unsubscribe = clerk.addListener(() => {
+        if (mounted) checkExistingAuth();
+      });
+      return () => {
+        mounted = false;
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [nav]);
+
+  // Dynamically personalize greeting if user enters a known email
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    const lower = val.toLowerCase();
+    if (lower.includes('amaka') && !userName) setUserName('Amaka Okafor');
+    else if (lower.includes('olivia') && !userName) setUserName('Olivia');
+    else if (lower.includes('tunde') && !userName) setUserName('Tunde Adeleke');
+    else if (lower.includes('zainab') && !userName) setUserName('Zainab Balogun');
+    else if (lower.includes('babajide') && !userName) setUserName('Babajide Sanwo');
+    else if (lower.includes('chioma') && !userName) setUserName('Chioma Okonkwo');
+  };
+
+  const firstName = userName ? userName.trim().split(' ')[0] : '';
 
   const handleSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setError('Please enter both your email and password');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await authApi.login({ email, password: password || 'password123' });
-      nav('/dash');
+      const res = await authApi.login({
+        email: cleanEmail,
+        password,
+      });
+
+      if (rememberMe) {
+        authStateStorage.setLastEmail(cleanEmail);
+      } else {
+        localStorage.removeItem('javi_last_email');
+      }
+
+      if (res?.user?.name) {
+        setUserName(res.user.name);
+      }
+
+      // Seamlessly route candidate based on their exact saved state in the funnel
+      const target = getRouteForStage(res?.user?.onboardingStage, cleanEmail, res?.user?.name);
+      nav(target);
     } catch (err: any) {
       console.warn('Login attempt:', err);
-      // If server returned an error message, show it
       setError(err?.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleAuth = () => {
-    if ((window as any).Clerk?.openSignIn) {
-      (window as any).Clerk.openSignIn({ redirectUrl: '/dash' });
-    } else {
-      handleSubmit();
+  const handleGoogleAuth = async () => {
+    const clerk = (window as any).Clerk;
+    if (clerk) {
+      // 1. If user is already signed in to Clerk, prevent single-session conflict and route immediately
+      if (clerk.session || clerk.user) {
+        try {
+          const t = await clerk.session?.getToken();
+          if (t) tokenStorage.set(t);
+        } catch {}
+        nav('/dash');
+        return;
+      }
+
+      // 2. Open Clerk sign-in modal if available
+      if (clerk.openSignIn) {
+        try {
+          await clerk.openSignIn({ redirectUrl: '/dash' });
+          return;
+        } catch (e: any) {
+          console.warn('Clerk openSignIn fallback', e);
+          if (
+            e?.code === 'cannot_render_single_session_enabled' ||
+            String(e?.message || e).includes('single_session') ||
+            clerk.user ||
+            clerk.session
+          ) {
+            nav('/dash');
+            return;
+          }
+        }
+      }
     }
+    setShowGoogleModal(true);
   };
 
   return (
-    <div
-      data-screen-label="Sign in"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        padding: '96px 150px 40px',
-        boxSizing: 'border-box',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 960,
-          height: 560,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
-          background: 'rgba(255,255,255,.95)',
-          border: '1px solid #ececef',
-          borderRadius: 22,
-          overflow: 'hidden',
-          boxShadow: '0 24px 60px rgba(40,80,160,.12)',
-        }}
-      >
-        {/* Left gradient side with interactive candidate stories slideshow */}
-        <AuthSlideshow />
-
-        {/* Right form side */}
-        <div
+    <AuthSplitLayout>
+      <div data-screen-label="Sign in" style={{ width: '100%' }}>
+        {/* Main Title & Subtitle (Strictly Personalized: Welcome back, {firstName}) */}
+        <h1
           style={{
-            padding: 38,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 14,
+            margin: '0 0 8px',
+            fontSize: 32,
+            fontWeight: 700,
+            letterSpacing: '-0.025em',
+            color: '#101828',
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-.6px' }}>
-            Welcome back
-          </h2>
-          <p style={{ margin: '0 0 8px', fontSize: 12.5, color: '#6a6a72' }}>
-            Sign in to see what Javi applied to.
-          </p>
+          Welcome back{firstName ? `, ${firstName}` : ''}
+        </h1>
+        <p
+          style={{
+            margin: '0 0 28px',
+            fontSize: 14,
+            color: '#667085',
+            lineHeight: '20px',
+          }}
+        >
+          Welcome back! Please enter your details.
+        </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button
-              type="button"
-              onClick={handleGoogleAuth}
-              style={{
-                height: 40,
-                border: '1px solid #e6e6ea',
-                borderRadius: 9,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#3a3a40',
-                background: '#fff',
-                cursor: 'pointer',
-                fontFamily: 'Montserrat, sans-serif',
-              }}
-            >
-              <GoogleLogo size={18} />
-              Google
-            </button>
-            <button
-              type="button"
-              onClick={handleGoogleAuth}
-              style={{
-                height: 40,
-                border: '1px solid #e6e6ea',
-                borderRadius: 9,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#3a3a40',
-                background: '#fff',
-                cursor: 'pointer',
-                fontFamily: 'Montserrat, sans-serif',
-              }}
-            >
-              <LinkedInLogo size={18} />
-              LinkedIn
-            </button>
-          </div>
+        {/* Google Social Login Button */}
+        <button
+          type="button"
+          onClick={handleGoogleAuth}
+          style={{
+            width: '100%',
+            height: 44,
+            border: '1px solid #d0d5dd',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            color: '#344054',
+            background: '#ffffff',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+        >
+          <GoogleLogo size={18} />
+          Log in with Google
+        </button>
 
+        {/* Divider "or" */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            margin: '22px 0',
+            color: '#667085',
+            fontSize: 13,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: '#eaecf0' }} />
+          <span>or</span>
+          <div style={{ flex: 1, height: 1, background: '#eaecf0' }} />
+        </div>
+
+        {/* Error Alert */}
+        {error && (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              margin: '6px 0',
-              color: '#a0a0aa',
-              fontSize: 11,
+              background: '#fef3f2',
+              border: '1px solid #fee4e2',
+              color: '#d92d20',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 12.5,
+              lineHeight: '18px',
+              marginBottom: 16,
             }}
           >
-            <div style={{ flex: 1, height: 1, background: '#eee' }} />
-            <span>or continue with email</span>
-            <div style={{ flex: 1, height: 1, background: '#eee' }} />
+            {error}
+          </div>
+        )}
+
+        {/* Sign In Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Email Input */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => handleEmailChange(e.target.value)}
+              placeholder="Enter your email"
+              required
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                height: 44,
+                border: '1px solid #d0d5dd',
+                borderRadius: 8,
+                padding: '0 14px',
+                fontSize: 14,
+                outline: 'none',
+                color: '#101828',
+                background: '#ffffff',
+                boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+                transition: 'border-color 0.15s ease',
+              }}
+              onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+              onBlur={(e) => (e.target.style.borderColor = '#d0d5dd')}
+            />
           </div>
 
-          {error && (
-            <div
-              style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#dc2626',
-                borderRadius: 8,
-                padding: '8px 12px',
-                fontSize: 11.5,
-                lineHeight: '16px',
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Work or personal email</label>
+          {/* Password Input */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>Password</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
                 required
                 style={{
-                  height: 38,
-                  border: '1px solid #e6e6ea',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  height: 44,
+                  border: '1px solid #d0d5dd',
                   borderRadius: 8,
-                  padding: '0 12px',
-                  fontSize: 12.5,
+                  padding: '0 42px 0 14px',
+                  fontSize: 14,
                   outline: 'none',
-                  fontFamily: 'Montserrat, sans-serif',
+                  color: '#101828',
+                  background: '#ffffff',
+                  boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+                  transition: 'border-color 0.15s ease',
                 }}
+                onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+                onBlur={(e) => (e.target.style.borderColor = '#d0d5dd')}
               />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((prev) => !prev)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#667085',
+                }}
+              >
+                {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+              </button>
             </div>
+          </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#3a3a40' }}>Password</label>
-                <a href="#" style={{ fontSize: 11, color: '#2f6ef0' }}>
-                  Forgot?
-                </a>
-              </div>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    height: 38,
-                    border: '1px solid #e6e6ea',
-                    borderRadius: 8,
-                    padding: '0 38px 0 12px',
-                    fontSize: 12.5,
-                    outline: 'none',
-                    fontFamily: 'Montserrat, sans-serif',
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: showPassword ? '#2f6ef0' : '#8e8e93',
-                  }}
-                >
-                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
+          {/* Remember Me & Forgot Password Row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label
               style={{
-                height: 42,
-                background: '#0b0b0c',
-                color: '#fff',
-                borderRadius: 8,
-                border: 0,
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: loading ? 'wait' : 'pointer',
-                marginTop: 4,
-                boxShadow: '0 4px 14px rgba(0,0,0,.12)',
-                fontFamily: 'Montserrat, sans-serif',
-                opacity: loading ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                color: '#344054',
+                cursor: 'pointer',
+                userSelect: 'none',
               }}
             >
-              {loading ? 'Signing in...' : 'Sign in to Javi'}
-            </button>
-          </form>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  border: '1px solid #d0d5dd',
+                  accentColor: '#101828',
+                  cursor: 'pointer',
+                }}
+              />
+              Remember for 30 days
+            </label>
 
-          <div
+            <Link
+              to="/forgot-password"
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#344054',
+                textDecoration: 'none',
+              }}
+            >
+              Forgot password
+            </Link>
+          </div>
+
+          {/* Primary Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
             style={{
-              textAlign: 'center',
-              fontSize: 11.5,
-              color: '#6a6a72',
-              marginTop: 4,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 8,
+              width: '100%',
+              height: 44,
+              background: '#101828',
+              color: '#ffffff',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: loading ? 'wait' : 'pointer',
+              marginTop: 6,
+              boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05)',
+              opacity: loading ? 0.7 : 1,
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#1d2939')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#101828')}
+          >
+            {loading ? 'Logging in...' : 'Log in'}
+          </button>
+        </form>
+
+        {/* Bottom Switcher with Handcrafted Underline Accent (Strictly Matching Image 2) */}
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: 13.5,
+            color: '#667085',
+            marginTop: 26,
+          }}
+        >
+          <span>Don't have an account? </span>
+          <Link
+            to="/signup"
+            style={{
+              color: '#101828',
+              fontWeight: 700,
+              textDecoration: 'none',
+              position: 'relative',
+              display: 'inline-block',
             }}
           >
-            <span>Don't have an account?</span>
-            <Link to="/signup" style={{ color: '#2f6ef0', fontWeight: 600 }}>
-              Sign up
-            </Link>
-
-
-          </div>
+            Sign up for free
+            <HandDrawnUnderline width="105%" color="#101828" />
+          </Link>
         </div>
       </div>
-    </div>
+
+      {/* Google Sign In Handshake Modal */}
+      <GoogleAuthModal
+        isOpen={showGoogleModal}
+        onClose={() => setShowGoogleModal(false)}
+        defaultEmail={email}
+        defaultName={userName}
+      />
+    </AuthSplitLayout>
   );
 };
+
+export default SignIn;

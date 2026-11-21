@@ -540,5 +540,137 @@ export const MessageCircleIcon: FC<IconProps> = ({ size = 16, color = 'currentCo
   </svg>
 );
 
+export const ArrowLeftIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);
+
+export const ArrowRightIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <line x1="5" y1="12" x2="19" y2="12" />
+    <polyline points="12 5 19 12 12 19" />
+  </svg>
+);
+
+export const CameraIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+    <circle cx="12" cy="13" r="3" />
+  </svg>
+);
+
+export const UploadIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+
+export const PlusIcon: FC<IconProps> = ({ size = 16, color = 'currentColor', style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+export const JaviBurstLogo: FC<{ size?: number; color?: string }> = ({ size = 26, color = '#0b0b0c' }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+    {Array.from({ length: 16 }).map((_, i) => {
+      const angle = (i * 360) / 16;
+      const rad = (angle * Math.PI) / 180;
+      return (
+        <line
+          key={i}
+          x1={16 + 5 * Math.cos(rad)}
+          y1={16 + 5 * Math.sin(rad)}
+          x2={16 + 14 * Math.cos(rad)}
+          y2={16 + 14 * Math.sin(rad)}
+          stroke={color}
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeOpacity={i % 2 === 0 ? 0.95 : 0.4}
+        />
+      );
+    })}
+    <circle cx="16" cy="16" r="2.8" fill={color} />
+  </svg>
+);
+
+export const KeyIcon: FC<{ size?: number; color?: string; style?: React.CSSProperties }> = ({
+  size = 20,
+  color = 'currentColor',
+  style,
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+  >
+    <path d="M21 2l-2 2m-1.5 1.5L14 9l-1.5-1.5L11 9l-1.5-1.5L8 9" />
+    <circle cx="7.5" cy="15.5" r="5.5" />
+    <path d="M15.5 7.5L19 4" />
+  </svg>
+);
+
+
 
 

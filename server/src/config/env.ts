@@ -41,10 +41,19 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().default(''),
   LLM_MODEL: z.string().default('anthropic/claude-opus-5'),
 
+  // SMTP / Nodemailer Configuration
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default('JAVI <no-reply@javi.ai>'),
+  SMTP_SECURE: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+
   // WhatsApp Alerts & Contact Updates
   WHATSAPP_PROVIDER: z.enum(['textmebot', 'callmebot', 'twilio', 'cloudapi', 'simulated']).default('textmebot'),
-  WHATSAPP_TO: z.string().default('2349025958370'),
-  TEXTMEBOT_APIKEY: z.string().default('2qXNzBC699fH'),
+  // Only for test scripts and admin alerts. User alerts always go to the user's own profile phone.
+  WHATSAPP_TO: z.string().default(''),
+  TEXTMEBOT_APIKEY: z.string().default(''),
   CALLMEBOT_APIKEY: z.string().default(''),
   TWILIO_ACCOUNT_SID: z.string().default(''),
   TWILIO_AUTH_TOKEN: z.string().default(''),
@@ -59,6 +68,36 @@ const schema = z.object({
   ADZUNA_COUNTRY: z.string().default('gb'),
   INGEST_EVERY_MINUTES: z.coerce.number().min(30).default(180),
   MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.35),
+
+  // Applying: 'live' drives a visible Brave/Chrome window on this machine (sign-ins persist, a human
+  // can step in for CAPTCHAs); 'headless' is the old server-side Chromium.
+  APPLY_BROWSER: z.enum(['live', 'headless']).default(process.env.NODE_ENV === 'production' ? 'headless' : 'live'),
+  /** Path to a Chromium-based browser. Empty = auto-detect Brave, then Chrome. */
+  LIVE_BROWSER_PATH: z.string().default(''),
+  LIVE_BROWSER_PORT: z.coerce.number().default(9333),
+  /** How long a live session keeps the page open waiting for a WhatsApp/dashboard reply. */
+  LIVE_WAIT_MINUTES: z.coerce.number().min(1).max(240).default(30),
+  /** Tests/CI only: run the live browser headless with a throwaway profile. */
+  LIVE_BROWSER_HEADLESS: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+  LIVE_BROWSER_PROFILE: z.string().default(''),
+  /** Dev/test only (ignored in production): let the URL guard accept localhost, e.g. a mock job site. */
+  ALLOW_PRIVATE_URLS: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+  /** Mount /api/test/* (demo pipelines that skip safety checks). Never in production. */
+  ENABLE_TEST_ROUTES: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+  /** A user's first N form applications are filled and screenshotted but not submitted, so they can check JAVI's work. */
+  FORM_DRY_RUN_FIRST: z.coerce.number().min(0).max(50).default(3),
+  /** OpenStreetMap endpoints for business lead search (overridable for tests or a self-hosted instance). */
+  OSM_NOMINATIM_URL: z.string().default('https://nominatim.openstreetmap.org'),
+  /** Comma-separated; tried in order when one is busy. */
+  OSM_OVERPASS_URL: z.string().default('https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter,https://maps.mail.ru/osm/tools/overpass/api/interpreter'),
+  /** Limit area lookups to these countries (ISO codes, comma-separated); empty = worldwide. */
+  OSM_COUNTRY_CODES: z.string().default('ng'),
+  /** Contact for the OSM usage policy (sent in the User-Agent). */
+  OSM_CONTACT: z.string().default(''),
+  /** Optional: Google PageSpeed Insights key for the business website audit (works without, at a low quota). */
+  PAGESPEED_API_KEY: z.string().default(''),
+  /** Ask Gmail for read-only access so sign-up verification codes are read automatically. */
+  GMAIL_READ_CODES: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
 });
 
 export const env = schema.parse(process.env);
