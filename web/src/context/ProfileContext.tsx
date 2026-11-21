@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type FC, type ReactNode } from 'react';
 import { EMPTY_PROFILE, type UserProfile } from '@/types/profile';
-import { profileApi } from '@/api';
+import { profileApi, tokenStorage } from '@/api';
 
 interface ProfileContextType {
   profile: UserProfile;
@@ -44,7 +44,24 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useEffect(() => {
-    refreshProfile();
+    void refreshProfile();
+    // Follow the session: load the profile when someone signs in (or the token is silently renewed after a
+    // gap), and wipe the cached copy on sign-out so the next person never sees it.
+    let hadToken = tokenStorage.hasToken();
+    return tokenStorage.subscribe((token) => {
+      if (!token) {
+        hadToken = false;
+        setProfileState(EMPTY_PROFILE);
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* storage unavailable */
+        }
+      } else if (!hadToken) {
+        hadToken = true;
+        void refreshProfile();
+      }
+    });
   }, []);
 
   useEffect(() => {
