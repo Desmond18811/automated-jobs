@@ -1,9 +1,9 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../config/env';
 import { logger } from '../lib/logger';
 
 class EmailService {
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: Transporter | null = null;
 
   constructor() {
     this.initTransporter();
@@ -32,93 +32,55 @@ class EmailService {
   }
 
   /**
-   * Dispatches a verification OTP code to the candidate's email.
-   * If SMTP is active, sends via Nodemailer.
-   * Always logs to terminal for local developer verification.
+   * Sends the passwordless sign-in email: a link to open and a 6-digit code to type on that page.
+   * Without SMTP (local dev only) the link and code are printed to the terminal instead.
+   * A failed send throws, so the caller knows the email did not go out.
    */
-  async sendOtpEmail(to: string, otp: string, name?: string): Promise<{ ok: boolean; messageId?: string }> {
-    const candidateName = name || 'there';
-    const subject = `Your JAVI Verification Code: ${otp}`;
+  async sendSignInEmail(to: string, code: string, linkUrl: string, name?: string): Promise<void> {
+    const who = name || 'there';
+    const subject = `Your J.A.V.I sign-in code: ${code}`;
 
-    // Highlighted console print for seamless local developer testing
-    console.log('\n============================================================');
-    console.log('📧 [JAVI NODEMAILER] Verification Code Dispatch');
-    console.log(`   To:       ${to}`);
-    console.log(`   Candidate:${candidateName}`);
-    console.log(`   OTP Code: ${otp} (Valid for 10 minutes)`);
-    console.log('============================================================\n');
+    if (!this.transporter) {
+      if (env.NODE_ENV === 'production') throw new Error('SMTP is not configured; cannot send sign-in email');
+      console.log('\n============================================================');
+      console.log('[JAVI] Sign-in email (no SMTP configured, dev only)');
+      console.log(`   To:   ${to}`);
+      console.log(`   Link: ${linkUrl}`);
+      console.log(`   Code: ${code}`);
+      console.log('============================================================\n');
+      return;
+    }
 
-    const html = `
-<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Your JAVI Verification Code</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 40px 16px;">
-  <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
-    
-    <!-- Brand Header -->
-    <div style="background-color: #0b0b0c; padding: 28px 32px; text-align: left;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">JAVI</span>
-      </div>
-      <p style="color: #94a3b8; font-size: 13px; margin: 6px 0 0;">Autonomous Career Agent & Application Engine</p>
+<head><meta charset="utf-8"><title>Sign in to J.A.V.I</title></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 40px 16px;">
+  <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e8edf2; border-radius: 16px; overflow: hidden;">
+    <div style="background-color: #141414; padding: 24px 32px;">
+      <span style="font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #ffffff;">J.A.V.I</span>
     </div>
-
-    <!-- Body Content -->
-    <div style="padding: 36px 32px;">
-      <h1 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 0; margin-bottom: 12px;">Verify your email address</h1>
-      <p style="font-size: 14px; line-height: 22px; color: #475467; margin: 0 0 24px;">
-        Hi ${candidateName},<br>
-        Welcome to JAVI! Please enter the 6-digit verification code below to verify your email and begin setting up your autonomous job search profile:
-      </p>
-
-      <!-- OTP Box -->
-      <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-        <div style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: Courier, monospace;">
-          ${otp}
-        </div>
-        <p style="font-size: 11px; color: #64748b; margin: 8px 0 0; text-transform: uppercase; font-weight: 600;">Code expires in 10 minutes</p>
+    <div style="padding: 32px;">
+      <h1 style="font-size: 20px; font-weight: 600; color: #111418; margin: 0 0 12px;">Sign in to J.A.V.I</h1>
+      <p style="font-size: 14px; line-height: 22px; color: #4e5862; margin: 0 0 20px;">Hi ${escapeHtml(who)}, open the link below, then enter this code on the page that opens.</p>
+      <div style="background-color: #f3f6f9; border: 1px solid #e3e9ee; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #111418; font-family: Courier, monospace;">${code}</div>
+        <p style="font-size: 11px; color: #5f6a74; margin: 8px 0 0;">Expires in 10 minutes</p>
       </div>
-
-      <p style="font-size: 12.5px; line-height: 19px; color: #64748b; margin: 0 0 16px;">
-        If you did not request this verification code, please ignore this email or reach out to our team if you have questions.
-      </p>
-    </div>
-
-    <!-- Footer -->
-    <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 32px; text-align: center;">
-      <p style="font-size: 11.5px; color: #94a3b8; margin: 0;">
-        &copy; ${new Date().getFullYear()} JAVI AI Inc. All rights reserved.
-      </p>
+      <a href="${linkUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; padding: 12px 22px; border-radius: 999px;">Open sign-in page</a>
+      <p style="font-size: 12px; line-height: 18px; color: #5f6a74; margin: 20px 0 0;">If you did not ask to sign in, you can ignore this email. Nobody can sign in without both the link and the code.</p>
     </div>
   </div>
 </body>
-</html>
-    `;
+</html>`;
 
-    const text = `Hi ${candidateName},\n\nYour JAVI verification code is: ${otp}\n\nThis code is valid for 10 minutes.\n\n© ${new Date().getFullYear()} JAVI AI Inc.`;
+    const text = `Hi ${who},\n\nOpen this link to sign in to J.A.V.I:\n${linkUrl}\n\nThen enter this code: ${code}\n\nThe code and link expire in 10 minutes. If you did not ask to sign in, ignore this email.`;
 
-    if (this.transporter) {
-      try {
-        const info = await this.transporter.sendMail({
-          from: env.SMTP_FROM,
-          to,
-          subject,
-          text,
-          html,
-        });
-        logger.info(`[EmailService] OTP email sent successfully to ${to} (MessageID: ${info.messageId})`);
-        return { ok: true, messageId: info.messageId };
-      } catch (err: any) {
-        logger.error(`[EmailService] Failed sending OTP via Nodemailer: ${err.message}. Code remains valid for login.`);
-        return { ok: true };
-      }
-    }
-
-    return { ok: true };
+    const info = await this.transporter.sendMail({ from: env.SMTP_FROM, to, subject, text, html });
+    logger.info(`[EmailService] Sign-in email sent to ${to} (MessageID: ${info.messageId})`);
   }
 }
+
+const escapeHtml = (s: string): string =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
 export const emailService = new EmailService();
