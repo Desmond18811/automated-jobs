@@ -1,21 +1,36 @@
-import { useEffect, type FC } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
-import { authStateStorage, getRouteForStage } from '@/api';
+import { type FC } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { authStateStorage } from '@/api';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
+import { HomeScreen } from '@/components/dashboard/screens/HomeScreen';
+import { NeedsYouScreen } from '@/components/dashboard/screens/NeedsYouScreen';
+import { JobFeedScreen } from '@/components/dashboard/screens/JobFeedScreen';
+import { DraftsScreen } from '@/components/dashboard/screens/DraftsScreen';
+import { TrackerScreen } from '@/components/dashboard/screens/TrackerScreen';
+import { CvProfileScreen } from '@/components/dashboard/screens/CvProfileScreen';
+import { BusinessScreen } from '@/components/dashboard/screens/BusinessScreen';
+import { AskScreen } from '@/components/dashboard/screens/AskScreen';
+import { SettingsScreen } from '@/components/dashboard/screens/SettingsScreen';
 
 export const DashboardPage: FC = () => {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const stage = authStateStorage.getStage();
-    // If onboarding is not completed, candidate must finish setup before viewing dashboard
-    if (stage && stage !== 'completed') {
-      const targetRoute = getRouteForStage(stage);
-      navigate(targetRoute, { replace: true });
-    }
-  }, [navigate]);
-
-  return <DashboardLayout />;
+  // Finish profile setup before the dashboard.
+  if (authStateStorage.getStage() !== 'completed') return <Navigate to="/setup" replace />;
+  return (
+    <Routes>
+      <Route element={<DashboardShell />}>
+        <Route index element={<HomeScreen />} />
+        <Route path="needs-you" element={<NeedsYouScreen />} />
+        <Route path="jobs" element={<JobFeedScreen />} />
+        <Route path="drafts" element={<DraftsScreen />} />
+        <Route path="tracker" element={<TrackerScreen />} />
+        <Route path="profile" element={<CvProfileScreen />} />
+        <Route path="business" element={<BusinessScreen />} />
+        <Route path="ask" element={<AskScreen />} />
+        <Route path="settings" element={<SettingsScreen />} />
+        <Route path="*" element={<Navigate to="/dash" replace />} />
+      </Route>
+    </Routes>
+  );
 };
 
 export default DashboardPage;
