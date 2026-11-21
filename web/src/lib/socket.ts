@@ -129,3 +129,9 @@ export const socketEvents = {
 };
 
 export default getSocket;
+
+// Follow silent token refreshes and sign-outs so the live connection never holds a stale token.
+tokenStorage.subscribe((token) => {
+  if (!token) disconnectSocket();
+  else updateSocketAuth(token);
+});
