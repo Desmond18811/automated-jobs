@@ -90,6 +90,19 @@ How the live session works (one tab per application):
 
 Tested by `npm run test:live` (a mock site covering sign-up, the code, two questions, a CAPTCHA and a two-page submit; 20 checks).
 
+## Update, 21 Nov: Business Mode round 1 and safety fixes
+
+| Finding | Status |
+|---|---|
+| H6 business search was fake | **Fixed:** real OpenStreetMap leads, CSV import and manual add, plus a real website audit. See [BUSINESS_MODE.md](BUSINESS_MODE.md). |
+| H7 outreach never sent | **Removed:** the fake sequence endpoints are gone. The real sequence is round 2; until then you send the first message yourself. |
+| H8 test pipeline lied | **Fixed:** `/api/test/*` exist only with `ENABLE_TEST_ROUTES=true` outside production, and the demo pipeline no longer sends a "submitted" WhatsApp. |
+| Auto mode before 10 approvals | **Fixed:** enforced on every profile update and again in the generate worker; locked in onboarding. |
+| Delete/export gaps | **Fixed:** site accounts (never passwords in exports), business leads and the services profile are included. |
+| Dry-run before submitting | **Added** (`FORM_DRY_RUN_FIRST`, default 3). |
+| Job feed invented scores | **Fixed:** shows the real match score and reasons, or "Not scored for you yet". Shows the real salary currency and a Remote OK credit link. |
+| New sources | Workable and SmartRecruiters board APIs. |
+
 ## Open findings
 
 ### High
