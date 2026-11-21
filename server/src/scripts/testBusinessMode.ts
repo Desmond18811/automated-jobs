@@ -10,7 +10,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { activateMemoryDb } from '../lib/memoryDb';
 import { createApp } from '../app';
-import { register, verifyOtp } from '../services/auth.service';
+import { createTestSession } from './authTestHelper';
 import { quote } from '../services/business/pricing';
 import { estimateValue } from '../services/business/value';
 import { auditLead } from '../services/business/audit';
@@ -129,8 +129,7 @@ async function main() {
   const server = createApp().listen(0);
   const api = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/business`;
   const email = `biz_${Date.now()}@example.com`;
-  const reg = await register(email, 'Password123!', 'Biz Tester');
-  const { accessToken } = await verifyOtp(email, reg.otpCode!);
+  const { accessToken } = await createTestSession(email, 'Biz Tester');
   const call = async (method: string, path: string, body?: unknown, form?: FormData) => {
     const res = await fetch(api + path, { method, headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: form ?? (body ? JSON.stringify(body) : undefined) });
     return { status: res.status, json: (await res.json().catch(() => ({}))) as any };
