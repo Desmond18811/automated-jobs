@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { parseBody } from '../lib/http';
+import { AppError, parseBody } from '../lib/http';
 import { logger } from '../lib/logger';
 import { removeUserFiles } from '../lib/storage';
 import { currentUser } from '../middleware/auth';
@@ -16,7 +16,6 @@ import { SiteAccount } from '../models/siteAccount.model';
 import { BusinessLead } from '../models/businessLead.model';
 import { BusinessServices } from '../models/businessServices.model';
 import { TaxonomyRequest } from '../models/taxonomyRequest.model';
-import { verifyPassword } from '../services/auth.service';
 import { disconnectGmail } from '../services/gmail.service';
 
 export class MeController {
@@ -40,10 +39,12 @@ export class MeController {
 
   static async deleteAccount(req: Request, res: Response) {
     const userId = currentUser(req);
-    const { password } = parseBody(z.object({ password: z.string().min(1) }), req.body);
-    await verifyPassword(userId, password);
-
+    // No password to re-enter any more: the user must type their own email to confirm.
+    const { confirmEmail } = parseBody(z.object({ confirmEmail: z.string().min(1) }), req.body);
     const email = (await User.findById(userId, { email: 1 }).lean())?.email;
+    if (!email || email.toLowerCase() !== confirmEmail.toLowerCase().trim()) {
+      throw new AppError(400, 'Type your account email to confirm deletion');
+    }
     await disconnectGmail(userId).catch((err) => logger.warn({ err }, 'gmail revoke failed during deletion'));
     const files = await removeUserFiles(userId);
     await Promise.all([
