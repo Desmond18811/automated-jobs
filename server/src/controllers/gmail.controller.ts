@@ -15,9 +15,9 @@ export class GmailController {
     if (!code || !state) throw new AppError(400, 'Missing code or state');
     try {
       await handleGmailCallback(code, state);
-      res.redirect(`${env.APP_URL}/settings?gmail=connected`);
+      res.redirect(`${env.APP_URL}/dash/settings?gmail=connected`);
     } catch (err) {
-      res.redirect(`${env.APP_URL}/settings?gmail=error&message=${encodeURIComponent(errorMessage(err))}`);
+      res.redirect(`${env.APP_URL}/dash/settings?gmail=error&message=${encodeURIComponent(errorMessage(err))}`);
     }
   }
 
