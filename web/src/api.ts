@@ -112,10 +112,11 @@ export const authStateStorage = {
       localStorage.setItem('javi_setup_step', String(step));
     } catch {}
   },
-  saveSession: (user?: { name?: string; email?: string; onboardingStage?: string }): void => {
+  saveSession: (user?: { name?: string; email?: string; onboardingStage?: string; setupStep?: number }): void => {
     if (user?.name) authStateStorage.setLastName(user.name);
     if (user?.email) authStateStorage.setLastEmail(user.email);
     if (user?.onboardingStage) authStateStorage.setStage(user.onboardingStage as any);
+    if (user?.setupStep) authStateStorage.setSetupStep(user.setupStep);
   },
 };
 
@@ -155,6 +156,7 @@ export interface SessionUser {
   email: string;
   name?: string;
   onboardingStage?: string;
+  setupStep?: number;
   isEmailVerified?: boolean;
   profileImage?: string;
 }
