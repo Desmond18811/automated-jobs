@@ -407,6 +407,13 @@ export function activateMemoryDb(): void {
       then: (resolve: any) => resolve(found || null),
     };
   };
+  (User as any).findByIdAndUpdate = (id: any, update: any) => {
+    const found = memoryUsers.find((u) => String(u._id) === String(id) || String(u.id) === String(id));
+    if (found) {
+      Object.assign(found, update);
+    }
+    return Promise.resolve(found || null);
+  };
   (User as any).create = (doc: any) => {
     const _id = new Types.ObjectId();
     const userDoc = {
@@ -416,6 +423,7 @@ export function activateMemoryDb(): void {
       email: doc.email.toLowerCase(),
       isEmailVerified: doc.isEmailVerified ?? false,
       onboardingStage: doc.onboardingStage || 'otp_pending',
+      setupStep: doc.setupStep || 1,
       save() {
         return Promise.resolve(this);
       },
