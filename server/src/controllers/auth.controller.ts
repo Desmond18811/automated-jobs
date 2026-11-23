@@ -121,6 +121,7 @@ export class AuthController {
       name: user.name,
       isEmailVerified: user.isEmailVerified ?? false,
       onboardingStage: user.onboardingStage || 'completed',
+      setupStep: user.setupStep || 1,
       profileImage: user.profileImage,
     });
   }
