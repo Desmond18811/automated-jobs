@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { JaviBrandMark } from '@/assets/logos';
 import { authApi, authStateStorage, profileApi, SETUP_STEP_COUNT } from '@/api';
@@ -42,6 +42,19 @@ export const ProfileSetupPage: FC = () => {
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // Sync step from server profile if available
+  useEffect(() => {
+    if (!loading && draft.setupStep && draft.setupStep >= 1 && draft.setupStep <= STEPS.length) {
+      const serverStep = draft.setupStep - 1;
+      const localStep = authStateStorage.getSetupStep() - 1;
+      const target = Math.max(serverStep, localStep);
+      if (target >= 0 && target < STEPS.length && target !== index) {
+        setIndex(target);
+        authStateStorage.setSetupStep(target + 1);
+      }
+    }
+  }, [loading, draft.setupStep]);
+
   const step = STEPS[index];
   const isLast = index === STEPS.length - 1;
 
@@ -50,6 +63,7 @@ export const ProfileSetupPage: FC = () => {
     setIndex(next);
     setProblems([]);
     authStateStorage.setSetupStep(next + 1);
+    profileApi.update({ setupStep: next + 1 }).catch(() => null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -60,7 +74,8 @@ export const ProfileSetupPage: FC = () => {
       setProblems(issues.map((i) => `${i} is required.`));
       return false;
     }
-    const overrides = NORMALIZERS[step.id]?.(draft) ?? {};
+    const nextStepNumber = Math.min(index + 2, STEPS.length);
+    const overrides = { ...(NORMALIZERS[step.id]?.(draft) ?? {}), setupStep: nextStepNumber };
     if (Object.keys(overrides).length) patch(overrides);
     try {
       await saveStep(step, overrides);
@@ -81,7 +96,9 @@ export const ProfileSetupPage: FC = () => {
 
   // Going back saves too when the step is complete, but never blocks: half-filled steps keep their draft.
   const back = async () => {
-    if (!(VALIDATORS[step.id]?.(draft) ?? []).length) await saveStep(step, NORMALIZERS[step.id]?.(draft) ?? {}).catch(() => undefined);
+    if (!(VALIDATORS[step.id]?.(draft) ?? []).length) {
+      await saveStep(step, { ...(NORMALIZERS[step.id]?.(draft) ?? {}), setupStep: Math.max(1, index) }).catch(() => undefined);
+    }
     goTo(index - 1);
   };
 
@@ -113,7 +130,15 @@ export const ProfileSetupPage: FC = () => {
     const props = { draft, patch };
     switch (step.id) {
       case 'import':
-        return <ImportStep draft={draft} onImported={adopt} />;
+        return (
+          <ImportStep
+            draft={draft}
+            onImported={(serverProfile) => {
+              adopt(serverProfile);
+              goTo(1);
+            }}
+          />
+        );
       case 'identity':
         return <IdentityStep {...props} />;
       case 'career':
