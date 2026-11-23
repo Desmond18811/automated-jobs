@@ -1,6 +1,5 @@
 import { type FC } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { authStateStorage } from '@/api';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { HomeScreen } from '@/components/dashboard/screens/HomeScreen';
 import { NeedsYouScreen } from '@/components/dashboard/screens/NeedsYouScreen';
@@ -13,8 +12,6 @@ import { AskScreen } from '@/components/dashboard/screens/AskScreen';
 import { SettingsScreen } from '@/components/dashboard/screens/SettingsScreen';
 
 export const DashboardPage: FC = () => {
-  // Finish profile setup before the dashboard.
-  if (authStateStorage.getStage() !== 'completed') return <Navigate to="/setup" replace />;
   return (
     <Routes>
       <Route element={<DashboardShell />}>
