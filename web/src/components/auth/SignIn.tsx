@@ -77,6 +77,40 @@ export const SignIn: FC = () => {
     <AuthSplitLayout>
       {sentTo ? (
         <div data-screen-label="Check your email" style={{ width: '100%' }}>
+          <button
+            type="button"
+            onClick={() => { setSentTo(null); setError(null); }}
+            aria-label="Back to enter email"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              border: 'none',
+              background: 'transparent',
+              color: '#475467',
+              fontSize: 13.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '6px 12px 6px 8px',
+              borderRadius: 8,
+              marginBottom: 16,
+              marginLeft: -8,
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f2f4f7';
+              e.currentTarget.style.color = '#101828';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#475467';
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            <span>Back</span>
+          </button>
           <span
             aria-hidden="true"
             style={{ width: 48, height: 48, borderRadius: 12, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}
