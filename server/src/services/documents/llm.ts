@@ -17,7 +17,13 @@ export async function complete(opts: {
 }): Promise<string> {
   // 1. Prefer OpenRouter if configured
   if (env.OPENROUTER_API_KEY) {
-    const primaryModel = env.LLM_MODEL || 'anthropic/claude-opus-5';
+    const primaryModel = env.LLM_MODEL || 'openai/gpt-4o-mini';
+    const modelsList = [
+      primaryModel,
+      'openai/gpt-4o-mini',
+      'google/gemini-2.5-flash',
+      'openai/gpt-4o',
+    ].filter((m, i, arr) => m && arr.indexOf(m) === i);
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -28,13 +34,13 @@ export async function complete(opts: {
       },
       body: JSON.stringify({
         model: primaryModel,
-        models: [primaryModel, 'anthropic/claude-sonnet-5.5', 'anthropic/claude-haiku-5.5'],
+        models: modelsList,
         messages: [
           ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
           { role: 'user', content: opts.prompt },
         ],
-        max_tokens: opts.maxTokens ?? 1500,
-        temperature: opts.temperature ?? 0.7,
+        max_tokens: opts.maxTokens ?? 2500,
+        temperature: opts.temperature ?? 0.3,
       }),
     });
 
