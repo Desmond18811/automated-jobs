@@ -1,4 +1,4 @@
-import { useState, type FC, type ReactNode, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useState, type FC, type ReactNode, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronDownIcon, XIcon, PlusIcon } from '@/assets/icons';
 
 // Tokens carried over from the original setup page so the wizard keeps its look.
@@ -501,6 +501,17 @@ export const BulletsInput: FC<{
   placeholder?: string;
 }> = ({ bullets, onChange, placeholder }) => {
   const [text, setText] = useState(() => bulletsToText(bullets));
+
+  useEffect(() => {
+    const formatted = bulletsToText(bullets);
+    setText((prev) => {
+      // Don't overwrite if user is in middle of editing with same lines
+      const prevNormalized = prev.trim().split('\n').filter(Boolean).join('\n');
+      const nextNormalized = formatted.trim().split('\n').filter(Boolean).join('\n');
+      return prevNormalized === nextNormalized ? prev : formatted;
+    });
+  }, [bullets]);
+
   return (
     <TextArea
       value={text}
