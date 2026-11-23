@@ -9,6 +9,7 @@ import { isValidTimeZone } from '../lib/time';
 import { currentUser } from '../middleware/auth';
 import { Application } from '../models/application.model';
 import { Profile } from '../models/profile.model';
+import { User } from '../models/user.model';
 import { enqueueGenerate, queues, defaultJobOpts } from '../queues';
 import { MIN_REVIEWED_FOR_AUTO, userApprovalCount } from '../services/safety.service';
 import { detectAts, greenhouse, lever, ashby, workable, smartrecruiters } from '../sources/ats';
@@ -106,6 +107,7 @@ export const UpdateProfileSchema = z
     summary: z.string().max(3000),
     elevatorPitch: z.string().max(800).optional(),
     highestEducationLevel: z.enum(['high_school', 'associate', 'bachelor', 'master', 'doctorate', 'bootcamp', 'self_taught']),
+    setupStep: z.number().int().min(1).max(9).optional(),
 
     primarySkills: z.array(z.string().min(1).max(60)).max(50),
     secondarySkills: z.array(z.string().min(1).max(60)).max(50).optional(),
@@ -155,12 +157,20 @@ function publicProfile(profile: any) {
   return obj;
 }
 
-/** Fill the top-level fields the setup UI reads (names, social URLs) from what the parsers return. */
-function enrichParsed(parsed: any) {
+function generateInitialsAvatar(name: string): string {
+  const clean = (name || 'J').trim();
+  const parts = clean.split(/\s+/);
+  const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')).toUpperCase() || 'J';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2563EB"/><stop offset="100%" stop-color="#1D4ED8"/></linearGradient></defs><rect width="256" height="256" rx="128" fill="url(#g)"/><text x="50%" y="54%" font-family="system-ui, -apple-system, sans-serif" font-size="96" font-weight="700" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** Fill the top-level fields the setup UI reads (names, social URLs, address, career) from what the parsers return. */
+export function enrichParsed(parsed: any) {
   const out = { ...parsed };
   if (out.fullName && !out.firstName) {
     const [first, ...rest] = String(out.fullName).trim().split(/\s+/);
-    out.firstName = first;
+    out.firstName = first || '';
     if (rest.length) out.lastName = rest.join(' ');
   }
   for (const link of Array.isArray(out.links) ? out.links : []) {
@@ -170,6 +180,131 @@ function enrichParsed(parsed: any) {
     else if (!out.twitterUrl && /(twitter|x)\.com/i.test(url)) out.twitterUrl = url;
     else if (!out.portfolioUrl && /^https?:/i.test(url)) out.portfolioUrl = url;
   }
+
+  // Avatar / Picture auto-generation from candidate initials
+  if (!out.avatarUrl && (out.fullName || out.firstName)) {
+    out.avatarUrl = generateInitialsAvatar(out.fullName || `${out.firstName || ''} ${out.lastName || ''}`);
+  }
+
+  // Address parsing from location
+  if (out.location && (!out.address || !out.address.city || !out.address.country)) {
+    const parts = String(out.location).split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      out.address = {
+        street: out.address?.street || '',
+        city: parts[0],
+        state: parts.length > 2 ? parts[1] : (out.address?.state || ''),
+        postalCode: out.address?.postalCode || '',
+        country: parts[parts.length - 1],
+      };
+    } else if (parts.length === 1) {
+      const loc = parts[0];
+      if (/nigeria/i.test(loc)) out.address = { street: '', city: 'Lagos', state: 'Lagos', postalCode: '', country: 'Nigeria' };
+      else if (/ghana/i.test(loc)) out.address = { street: '', city: 'Accra', state: '', postalCode: '', country: 'Ghana' };
+      else if (/kenya/i.test(loc)) out.address = { street: '', city: 'Nairobi', state: '', postalCode: '', country: 'Kenya' };
+      else if (/united kingdom|uk\b/i.test(loc)) out.address = { street: '', city: 'London', state: '', postalCode: '', country: 'United Kingdom' };
+      else if (/united states|usa\b/i.test(loc)) out.address = { street: '', city: 'New York', state: 'NY', postalCode: '', country: 'United States' };
+      else out.address = { street: '', city: loc, state: '', postalCode: '', country: loc };
+    }
+  }
+
+  // Current title & current company from first experience or headline
+  if (Array.isArray(out.experience) && out.experience.length > 0) {
+    const recent = out.experience[0];
+    if (recent.title && (!out.currentTitle || out.currentTitle === 'Role')) out.currentTitle = recent.title;
+    if (recent.company && (!out.currentCompany || out.currentCompany === 'Company')) out.currentCompany = recent.company;
+  } else if (!out.currentTitle && out.headline) {
+    out.currentTitle = out.headline;
+  }
+
+  // Target roles from title or headline
+  if (!out.targetRoles || (Array.isArray(out.targetRoles) && out.targetRoles.length === 0)) {
+    const candidateRole = out.currentTitle || out.headline;
+    if (candidateRole) {
+      const roleClean = String(candidateRole).split(/[·|•,-]/)[0].trim();
+      if (roleClean && roleClean.length >= 2) {
+        out.targetRoles = [roleClean];
+      }
+    }
+  }
+
+  // Preferred job locations from candidate location or recent job location
+  if (!out.locations || (Array.isArray(out.locations) && out.locations.length === 0)) {
+    const loc = out.location || out.experience?.[0]?.location || (out.address?.city ? `${out.address.city}${out.address.country ? `, ${out.address.country}` : ''}` : '');
+    if (loc) out.locations = [loc];
+  }
+
+  // Years of experience from experience dates
+  if (out.yearsOfExperience == null) {
+    if (Array.isArray(out.experience) && out.experience.length > 0) {
+      const allYears: number[] = [];
+      for (const exp of out.experience) {
+        const s = String(exp.start || '').match(/\b(19\d\d|20\d\d)\b/g);
+        const e = String(exp.end || '').match(/\b(19\d\d|20\d\d)\b/g);
+        if (s) allYears.push(...s.map(Number));
+        if (e) allYears.push(...e.map(Number));
+        if (exp.current) allYears.push(new Date().getFullYear());
+      }
+      if (allYears.length >= 2) {
+        const diff = Math.max(1, Math.max(...allYears) - Math.min(...allYears));
+        out.yearsOfExperience = Math.min(40, diff);
+      } else {
+        out.yearsOfExperience = Math.min(30, Math.max(1, Math.round(out.experience.length * 1.5)));
+      }
+    }
+  }
+  if (out.yearsOfExperience != null && !out.inferredLevel) {
+    const y = out.yearsOfExperience;
+    out.inferredLevel = y < 1 ? 'entry' : y <= 2 ? 'junior' : y <= 5 ? 'mid' : y <= 9 ? 'senior' : 'expert';
+    if (!out.validatedLevel) out.validatedLevel = out.inferredLevel;
+  }
+
+  // Highest education level from education
+  if (!out.highestEducationLevel && Array.isArray(out.education) && out.education.length > 0) {
+    const degText = out.education.map((e: any) => `${e.degree || ''} ${e.field || ''}`).join(' ').toLowerCase();
+    if (/phd|doctorate|doctor of/i.test(degText)) out.highestEducationLevel = 'doctorate';
+    else if (/master|mba|msc|m\.s\b|m\.a\b|postgraduate/i.test(degText)) out.highestEducationLevel = 'master';
+    else if (/bachelor|bsc|b\.s\b|b\.a\b|btech|b\.eng|undergraduate/i.test(degText)) out.highestEducationLevel = 'bachelor';
+    else if (/associate|hnd|ond|diploma/i.test(degText)) out.highestEducationLevel = 'associate';
+    else if (/bootcamp|certificate|nanodegree/i.test(degText)) out.highestEducationLevel = 'bootcamp';
+    else out.highestEducationLevel = 'bachelor';
+  }
+
+  // Skills
+  if (Array.isArray(out.skills) && out.skills.length > 0) {
+    const skillNames: string[] = out.skills.map((s: any) => (typeof s === 'string' ? s : s.name)).filter(Boolean);
+    if (!out.primarySkills || !out.primarySkills.length) {
+      out.primarySkills = skillNames.slice(0, 10);
+    }
+    if (!out.secondarySkills || !out.secondarySkills.length) {
+      out.secondarySkills = skillNames.slice(10, 20);
+    }
+    if (!out.toolsAndFrameworks || !out.toolsAndFrameworks.length) {
+      const toolKeywords = ['git', 'docker', 'figma', 'jira', 'aws', 'kubernetes', 'postman', 'vscode', 'linux', 'webpack', 'vite', 'redis', 'graphql', 'rest', 'ci/cd', 'github actions'];
+      out.toolsAndFrameworks = skillNames.filter((s) => toolKeywords.some((tk) => s.toLowerCase().includes(tk)));
+    }
+  }
+
+  // Elevator pitch
+  if (!out.elevatorPitch && out.headline) {
+    const skillsSnippet = out.primarySkills?.slice(0, 3).join(', ');
+    out.elevatorPitch = `${out.headline}${out.yearsOfExperience ? ` with over ${out.yearsOfExperience} years of experience` : ''}${skillsSnippet ? ` specializing in ${skillsSnippet}` : ''}.`;
+  }
+
+  // Eligibility & default job preferences
+  if (!out.workAuthorization) out.workAuthorization = 'authorized';
+  if (out.willingToRelocate === undefined) out.willingToRelocate = true;
+  if (!out.noticePeriod) out.noticePeriod = '1 month';
+  if (!out.remotePreference) out.remotePreference = 'any';
+  if (!out.industry && out.targetRoles?.length) {
+    const r = out.targetRoles[0].toLowerCase();
+    if (/design|ui|ux|product/i.test(r)) out.industry = 'Product & Design';
+    else if (/engineer|developer|software|backend|frontend|devops|cloud|data/i.test(r)) out.industry = 'Software & Technology';
+    else if (/finance|account|fintech/i.test(r)) out.industry = 'Finance & FinTech';
+    else if (/marketing|growth|content/i.test(r)) out.industry = 'Marketing & Communications';
+    else out.industry = 'Technology';
+  }
+
   return out;
 }
 
@@ -219,20 +354,101 @@ export class ProfileController {
     if (parsedData) parsedData = enrichParsed(parsedData);
 
     if (profile && parsedData) {
-      // Merge, don't overwrite: the deterministic parser returns empty arrays for experience etc.,
-      // and blank strings for anything it missed. Neither should erase what the user already has.
+      // Merge scalar fields
       for (const [key, value] of Object.entries(parsedData)) {
         if (value == null) continue;
-        if (Array.isArray(value) && value.length === 0) continue;
+        if (Array.isArray(value)) continue; // Handled explicitly below
         if (typeof value === 'string' && value.trim() === '') continue;
         profile.set(key, value);
       }
-      if (parsedData.skills?.length && !profile.primarySkills.length) {
-        profile.primarySkills = parsedData.skills.map((s: any) => (typeof s === 'string' ? s : s.name));
+
+      // Explicitly map structured subdocument arrays to preserve IDs, types, and bullet achievements
+      if (Array.isArray(parsedData.experience) && parsedData.experience.length > 0) {
+        profile.experience = parsedData.experience.map((e: any) => ({
+          ...withId(e),
+          company: e.company || 'Company',
+          title: e.title || 'Role',
+          location: e.location || '',
+          start: e.start || '',
+          end: e.end || '',
+          current: !!e.current,
+          bullets: (e.bullets || []).map((b: any) => withId(typeof b === 'string' ? { text: b } : b)),
+        }));
       }
+
+      if (Array.isArray(parsedData.education) && parsedData.education.length > 0) {
+        profile.education = parsedData.education.map((ed: any) => ({
+          ...withId(ed),
+          institution: ed.institution || 'University',
+          degree: ed.degree || '',
+          field: ed.field || '',
+          start: ed.start || '',
+          end: ed.end || '',
+          grade: ed.grade || '',
+        }));
+      }
+
+      if (Array.isArray(parsedData.projects) && parsedData.projects.length > 0) {
+        profile.projects = parsedData.projects.map((p: any) => ({
+          ...withId(p),
+          name: p.name || 'Project',
+          url: p.url || '',
+          description: p.description || '',
+          skills: p.skills || [],
+          bullets: (p.bullets || []).map((b: any) => withId(typeof b === 'string' ? { text: b } : b)),
+        }));
+      }
+
+      if (Array.isArray(parsedData.certifications) && parsedData.certifications.length > 0) {
+        profile.certifications = parsedData.certifications.map(withId);
+      }
+
+      if (Array.isArray(parsedData.skills) && parsedData.skills.length > 0) {
+        profile.skills = parsedData.skills;
+        profile.primarySkills = parsedData.primarySkills?.length
+          ? parsedData.primarySkills
+          : parsedData.skills.map((s: any) => (typeof s === 'string' ? s : s.name)).slice(0, 15);
+      }
+      if (parsedData.secondarySkills?.length) profile.secondarySkills = parsedData.secondarySkills;
+      if (parsedData.toolsAndFrameworks?.length) profile.toolsAndFrameworks = parsedData.toolsAndFrameworks;
+
+      if (parsedData.targetRoles?.length) {
+        profile.targetRoles = parsedData.targetRoles;
+      }
+      if (parsedData.locations?.length) {
+        profile.locations = parsedData.locations;
+      }
+      if (parsedData.address && (!profile.address || !profile.address.city)) {
+        profile.address = parsedData.address;
+      }
+      if (parsedData.currentTitle) {
+        profile.currentTitle = parsedData.currentTitle;
+      }
+      if (parsedData.currentCompany) {
+        profile.currentCompany = parsedData.currentCompany;
+      }
+      if (parsedData.yearsOfExperience != null) {
+        profile.yearsOfExperience = parsedData.yearsOfExperience;
+        profile.inferredLevel = parsedData.inferredLevel;
+        profile.validatedLevel = parsedData.validatedLevel;
+      }
+      if (parsedData.highestEducationLevel) {
+        profile.highestEducationLevel = parsedData.highestEducationLevel;
+      }
+      if (parsedData.avatarUrl) {
+        profile.avatarUrl = parsedData.avatarUrl;
+      }
+      if (parsedData.elevatorPitch) {
+        profile.elevatorPitch = parsedData.elevatorPitch;
+      }
+      profile.setupStep = 2;
       profile.cv = { originalName: file.originalname, path: dest, mime: file.mimetype, uploadedAt: new Date(), rawText, parseWarnings: warnings };
       profile.status = 'draft';
       await profile.save();
+
+      if (userId) {
+        await User.findByIdAndUpdate(userId, { setupStep: 2, profileImage: profile.avatarUrl || parsedData.avatarUrl }).catch(() => null);
+      }
     }
 
     res.json({
@@ -257,8 +473,15 @@ export class ProfileController {
       }
     }
 
-    const { rules, experience, projects, education, certifications, ...rest } = body;
+    const { rules, experience, projects, education, certifications, setupStep, ...rest } = body;
     profile.set(rest);
+    if (setupStep) {
+      profile.setupStep = setupStep;
+      await User.findByIdAndUpdate(userId, { setupStep }).catch(() => null);
+    }
+    if (body.avatarUrl) {
+      await User.findByIdAndUpdate(userId, { profileImage: body.avatarUrl }).catch(() => null);
+    }
     if (experience) profile.experience = experience.map((e) => ({ ...withId(e), bullets: e.bullets.map(withId) }));
     if (projects) profile.projects = projects.map((p) => ({ ...withId(p), bullets: p.bullets.map(withId) }));
     if (education) profile.education = education.map(withId);
