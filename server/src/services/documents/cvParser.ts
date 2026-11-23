@@ -22,6 +22,129 @@ const optVal = z
   .union([z.string(), z.number()])
   .nullish()
   .transform((v) => (v === null || v === undefined || v === '' ? undefined : String(v).trim()));
+
+const bulletItem = z.union([
+  z.string(),
+  z.object({ text: z.string() }).transform((o) => o.text),
+  z.object({ bullet: z.string() }).transform((o) => o.bullet),
+  z.object({ achievement: z.string() }).transform((o) => o.achievement),
+  z.object({ description: z.string() }).transform((o) => o.description),
+]);
+
+const bulletList = z
+  .array(bulletItem)
+  .nullish()
+  .transform((v) => (v ?? []).map((s) => String(s).trim()).filter(Boolean));
+
+const experienceItem = z
+  .object({
+    company: optStr,
+    employer: optStr,
+    organization: optStr,
+    title: optStr,
+    role: optStr,
+    position: optStr,
+    location: optStr,
+    city: optStr,
+    start: optVal,
+    startDate: optVal,
+    start_date: optVal,
+    end: optVal,
+    endDate: optVal,
+    end_date: optVal,
+    current: z.boolean().nullish(),
+    bullets: bulletList,
+    achievements: bulletList,
+    highlights: bulletList,
+    responsibilities: bulletList,
+  })
+  .transform((e) => {
+    const rawCompany = e.company || e.employer || e.organization || '';
+    const rawTitle = e.title || e.role || e.position || '';
+    const location = e.location || e.city || undefined;
+    const start = e.start || e.startDate || e.start_date || undefined;
+    const end = e.end || e.endDate || e.end_date || undefined;
+    const bullets = [
+      ...(e.bullets || []),
+      ...(e.achievements || []),
+      ...(e.highlights || []),
+      ...(e.responsibilities || []),
+    ];
+    return {
+      company: rawCompany,
+      title: rawTitle,
+      location,
+      start,
+      end,
+      current: e.current ?? (end ? /present|current|now/i.test(String(end)) : false),
+      bullets: [...new Set(bullets)],
+    };
+  });
+
+const educationItem = z
+  .object({
+    institution: optStr,
+    school: optStr,
+    university: optStr,
+    college: optStr,
+    degree: optStr,
+    degree_name: optStr,
+    field: optStr,
+    major: optStr,
+    field_of_study: optStr,
+    start: optVal,
+    startDate: optVal,
+    end: optVal,
+    endDate: optVal,
+    year: optVal,
+    grade: optStr,
+    gpa: optStr,
+  })
+  .transform((e) => {
+    const institution = e.institution || e.school || e.university || e.college || '';
+    const degree = e.degree || e.degree_name || undefined;
+    const field = e.field || e.major || e.field_of_study || undefined;
+    const start = e.start || e.startDate || undefined;
+    const end = e.end || e.endDate || e.year || undefined;
+    const grade = e.grade || e.gpa || undefined;
+    return { institution, degree, field, start, end, grade };
+  });
+
+const projectItem = z
+  .object({
+    name: optStr,
+    title: optStr,
+    project_name: optStr,
+    url: optStr,
+    link: optStr,
+    description: optStr,
+    summary: optStr,
+    bullets: bulletList,
+    highlights: bulletList,
+  })
+  .transform((p) => ({
+    name: p.name || p.title || p.project_name || '',
+    url: p.url || p.link || undefined,
+    description: p.description || p.summary || undefined,
+    bullets: [...new Set([...(p.bullets || []), ...(p.highlights || [])])],
+  }));
+
+const certificationItem = z
+  .object({
+    name: optStr,
+    title: optStr,
+    certificate: optStr,
+    issuer: optStr,
+    organization: optStr,
+    year: optVal,
+    date: optVal,
+  })
+  .transform((c) => ({
+    name: c.name || c.title || c.certificate || '',
+    issuer: c.issuer || c.organization || undefined,
+    year: c.year || c.date || undefined,
+  }));
+
 const strList = z
   .array(z.string())
   .nullish()
@@ -37,25 +160,76 @@ const ParsedCv = z.object({
   summary: optStr,
   links: list(z.object({ label: optStr, url: z.string() })),
   skills: strList,
-  experience: list(z.object({ company: optStr, title: optStr, location: optStr, start: optVal, end: optVal, current: z.boolean().nullish(), bullets: strList })),
-  education: list(z.object({ institution: optStr, degree: optStr, field: optStr, start: optVal, end: optVal, grade: optStr })),
-  projects: list(z.object({ name: optStr, url: optStr, description: optStr, bullets: strList })),
-  certifications: list(z.object({ name: optStr, issuer: optStr, year: optVal })),
+  experience: list(experienceItem),
+  education: list(educationItem),
+  projects: list(projectItem),
+  certifications: list(certificationItem),
 });
 
-const SYSTEM = `You convert CV text into structured data.
-Copy facts exactly as written. Do not infer, embellish, merge, translate or add anything that is not in the text.
-If a field is missing, use null or an empty list. Keep each bullet as written; you may only repair broken line wraps.`;
+const SYSTEM = `You convert CV/Resume text into clean, structured JSON.
+CRITICAL EXTRACTION RULES:
+1. Experience:
+   - "company": Name of the employer/company (e.g. "Google", "Stripe", "Paystack").
+   - "title": Job title or role (e.g. "Senior Software Engineer", "Product Designer"). NEVER put company name here.
+   - "location": City, state, or country (e.g. "London, UK", "Lagos, Nigeria", "Remote"). NEVER create a separate job entry for location.
+   - "start" and "end": Dates of employment (e.g. "2021", "March 2021", "Present").
+   - "current": true if the candidate currently works there.
+   - "bullets": List of achievement statements and responsibilities. Each bullet MUST be a complete sentence or accomplishment.
+2. Education:
+   - "institution": University or school name.
+   - "degree": Degree type (e.g. "B.Sc.", "Master of Science", "HND").
+   - "field": Major or subject (e.g. "Computer Science", "Economics").
+   - "start" and "end": Years attended.
+   - "grade": Honours or GPA if mentioned.
+3. Keep facts exactly as stated in the CV. Do not hallucinate or invent roles.`;
 
-const SHAPE = `Return JSON with this shape:
-{"full_name": str|null, "headline": str|null, "email": str|null, "phone": str|null, "location": str|null, "summary": str|null,
- "links": [{"label": str|null, "url": str}],
- "skills": [str],
- "experience": [{"company": str|null, "title": str|null, "location": str|null, "start": str|null, "end": str|null, "current": bool|null, "bullets": [str]}],
- "education": [{"institution": str|null, "degree": str|null, "field": str|null, "start": str|null, "end": str|null, "grade": str|null}],
- "projects": [{"name": str|null, "url": str|null, "description": str|null, "bullets": [str]}],
- "certifications": [{"name": str|null, "issuer": str|null, "year": str|null}]}
-List experience in the same order as the CV (most recent first).`;
+const SHAPE = `Return ONLY raw JSON with this exact shape:
+{
+  "full_name": str|null,
+  "headline": str|null,
+  "email": str|null,
+  "phone": str|null,
+  "location": str|null,
+  "summary": str|null,
+  "links": [{"label": str|null, "url": str}],
+  "skills": [str],
+  "experience": [
+    {
+      "company": str,
+      "title": str,
+      "location": str|null,
+      "start": str|null,
+      "end": str|null,
+      "current": bool,
+      "bullets": [str]
+    }
+  ],
+  "education": [
+    {
+      "institution": str,
+      "degree": str|null,
+      "field": str|null,
+      "start": str|null,
+      "end": str|null,
+      "grade": str|null
+    }
+  ],
+  "projects": [
+    {
+      "name": str,
+      "url": str|null,
+      "description": str|null,
+      "bullets": [str]
+    }
+  ],
+  "certifications": [
+    {
+      "name": str,
+      "issuer": str|null,
+      "year": str|null
+    }
+  ]
+}`;
 
 export type ParsedProfile = Pick<
   IProfile,
@@ -352,6 +526,242 @@ export function parseCvDeterministic(rawText: string): ParsedProfile {
     summary = nextLines.join(' ').slice(0, 600);
   }
 
+  // 9. Work Experience Extraction (Intelligent Block & Token Parser)
+  const experience: ParsedProfile['experience'] = [];
+  const expIdx = lines.findIndex((l) =>
+    /^(experience|work experience|employment history|work history|professional experience|career history|relevant experience)\b/i.test(l.trim()),
+  );
+
+  const TITLE_REGEX = /\b(engineer|developer|designer|architect|manager|lead|director|vp|consultant|analyst|specialist|officer|head|administrator|scientist|researcher|technician|writer|producer|intern|founder|co-founder|cto|ceo|cpo|strategist|executive|coordinator|representative|specialist|fellow)\b/i;
+  const DATE_RANGE_REGEX = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\b(19\d\d|20\d\d)\b\s*(?:[-–—]|to)\s*(present|current|now|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*)?\b(19\d\d|20\d\d)\b)/i;
+  const KNOWN_LOC_TOKENS = ['remote', 'hybrid', 'on-site', 'onsite', 'lagos', 'abuja', 'port harcourt', 'nigeria', 'london', 'united kingdom', 'uk', 'new york', 'san francisco', 'menlo park', 'berlin', 'germany', 'canada', 'toronto', 'accra', 'ghana', 'nairobi', 'kenya', 'austin', 'seattle', 'boston', 'chicago'];
+
+  if (expIdx !== -1) {
+    let currentExp: any = null;
+    let lastWasBullet = false;
+
+    for (let i = expIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^(education|academic background|academics|qualifications|skills|projects|certifications|languages|references|publications|awards)\b/i.test(line)) {
+        break;
+      }
+
+      const isBulletMarker =
+        /^[-•*▪▫◦⦿▸►✔–—]/.test(line) ||
+        /^\d+[\.\)]\s+/.test(line) ||
+        /\b(spearheaded|architected|developed|built|designed|led|managed|engineered|implemented|optimized|created|automated|collaborated|delivered|scaled|maintained|resolved|conducted|directed|executed|analyzed|authored|mentored|trained|integrated|established|launched)\b/i.test(line);
+
+      if (isBulletMarker) {
+        const cleanBullet = line.replace(/^[-•*▪▫◦⦿▸►✔–—\d\.\)]+\s*/, '').trim();
+        if (cleanBullet) {
+          if (!currentExp) {
+            currentExp = { id: shortId(), title: 'Role', company: 'Company', location: undefined, start: undefined, end: undefined, current: false, bullets: [] };
+            experience.push(currentExp);
+          }
+          currentExp.bullets.push({ id: shortId(), text: cleanBullet });
+          lastWasBullet = true;
+        }
+        continue;
+      }
+
+      // Check if line is a continuation of the previous bullet point (PDF line-wrap)
+      if (
+        lastWasBullet &&
+        currentExp &&
+        currentExp.bullets.length > 0 &&
+        !DATE_RANGE_REGEX.test(line) &&
+        !TITLE_REGEX.test(line) &&
+        line.length < 240 &&
+        !line.includes('—') &&
+        !line.includes('|')
+      ) {
+        const lastBullet = currentExp.bullets[currentExp.bullets.length - 1];
+        lastBullet.text += ' ' + line;
+        continue;
+      }
+
+      lastWasBullet = false;
+
+      // Check if line is solely a date range or location for the active job
+      const dateMatch = line.match(DATE_RANGE_REGEX);
+      const isOnlyDate = dateMatch && line.replace(DATE_RANGE_REGEX, '').replace(/[|,\-–—()\s]/g, '').length === 0;
+      const isOnlyLocation = KNOWN_LOC_TOKENS.some(
+        (loc) => line.toLowerCase() === loc || line.toLowerCase() === `${loc}, uk` || line.toLowerCase() === `${loc}, nigeria` || line.toLowerCase() === `${loc}, united kingdom`,
+      );
+
+      if (currentExp && (isOnlyDate || isOnlyLocation)) {
+        if (dateMatch) {
+          currentExp.start = dateMatch[1];
+          currentExp.end = /present|current|now/i.test(dateMatch[2]) ? undefined : dateMatch[2];
+          currentExp.current = /present|current|now/i.test(dateMatch[2]);
+        }
+        if (isOnlyLocation || KNOWN_LOC_TOKENS.some((t) => line.toLowerCase().includes(t))) {
+          currentExp.location = line.replace(/[()]/g, '').trim();
+        }
+        continue;
+      }
+
+      // Parse as Job Header: Title, Company, Location, and Date
+      let lineSansDate = line;
+      let jobStart: string | undefined;
+      let jobEnd: string | undefined;
+      let jobCurrent = false;
+
+      if (dateMatch) {
+        jobStart = dateMatch[1];
+        jobEnd = /present|current|now/i.test(dateMatch[2]) ? undefined : dateMatch[2];
+        jobCurrent = /present|current|now/i.test(dateMatch[2]);
+        lineSansDate = line.replace(dateMatch[0], '').trim();
+      }
+
+      // Split line into constituent tokens
+      const rawParts = lineSansDate
+        .split(/[|—–]|\bat\b/i)
+        .map((s) => s.trim().replace(/^[,\-–—\s]+|[,\-–—\s]+$/g, ''))
+        .filter(Boolean);
+
+      let extractedTitle = '';
+      let extractedCompany = '';
+      let extractedLoc = '';
+
+      for (const part of rawParts) {
+        const lower = part.toLowerCase();
+        if (KNOWN_LOC_TOKENS.some((t) => lower.includes(t)) && !TITLE_REGEX.test(part)) {
+          extractedLoc = part;
+        } else if (TITLE_REGEX.test(part) && !extractedTitle) {
+          extractedTitle = part;
+        } else if (!extractedCompany) {
+          extractedCompany = part;
+        } else if (!extractedTitle) {
+          extractedTitle = part;
+        }
+      }
+
+      if (extractedTitle || extractedCompany) {
+        currentExp = {
+          id: shortId(),
+          title: extractedTitle || 'Role',
+          company: extractedCompany || 'Company',
+          location: extractedLoc || undefined,
+          start: jobStart,
+          end: jobEnd,
+          current: jobCurrent,
+          bullets: [],
+        };
+        experience.push(currentExp);
+      } else if (currentExp && extractedLoc) {
+        currentExp.location = extractedLoc;
+      }
+    }
+  }
+
+  // 10. Education Extraction (Intelligent Grouped Parser)
+  const education: ParsedProfile['education'] = [];
+  const eduIdx = lines.findIndex((l) =>
+    /^(education|academic background|academics|qualifications|educational history)\b/i.test(l.trim()),
+  );
+
+  if (eduIdx !== -1) {
+    let currentEdu: any = null;
+    for (let i = eduIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^(experience|skills|projects|certifications|languages|references|awards)\b/i.test(line)) break;
+      if (line.length < 3 || /^page\b/i.test(line)) continue;
+
+      const years = line.match(/\b(19\d\d|20\d\d)\b/g);
+      const isInst = /university|college|institute|polytechnic|school|academy|faculty/i.test(line);
+      const isDeg = /bachelor|bsc|b\.s|b\.eng|master|msc|m\.s|mba|phd|doctorate|associate|hnd|ond|diploma|degree/i.test(line);
+      const gradeMatch = line.match(/\b(first class|second class|distinction|honours|cum laude|summa|gpa\s*[\d\.]+|\b\d\.\d+\s*\/\s*[\d\.]+)\b/i);
+
+      if (isInst && !currentEdu) {
+        currentEdu = {
+          id: shortId(),
+          institution: line.split(/[|,\-–—]/)[0].trim(),
+          start: years?.[0],
+          end: years?.[1] || years?.[0],
+          grade: gradeMatch ? gradeMatch[0] : undefined,
+        };
+        education.push(currentEdu);
+      } else if (currentEdu && (isDeg || years || gradeMatch)) {
+        if (!currentEdu.degree && isDeg) {
+          const parts = line.split(/[|,\-–—]/).map((s) => s.trim()).filter(Boolean);
+          currentEdu.degree = parts.find((p) => /bachelor|bsc|b\.s|b\.eng|master|msc|mba|phd|associate|hnd|ond|diploma/i.test(p)) || parts[0];
+          const fieldPart = parts.find((p) => p !== currentEdu.degree && !/\b(19\d\d|20\d\d)\b/.test(p) && !/honours|first class|gpa/i.test(p));
+          if (fieldPart) currentEdu.field = fieldPart.replace(/^in\s+/i, '');
+        }
+        if (!currentEdu.start && years?.[0]) currentEdu.start = years[0];
+        if (!currentEdu.end && (years?.[1] || years?.[0])) currentEdu.end = years[1] || years[0];
+        if (!currentEdu.grade && gradeMatch) currentEdu.grade = gradeMatch[0];
+      } else if (line.length >= 6) {
+        const parts = line.split(/[|,\-–—]/).map((s) => s.trim()).filter(Boolean);
+        const deg = parts.find((p) => /bachelor|bsc|b\.s|b\.eng|master|msc|mba|phd|associate|hnd|ond|diploma/i.test(p));
+        const inst = parts.find((p) => /university|college|institute|polytechnic|school/i.test(p)) || parts[0];
+        currentEdu = {
+          id: shortId(),
+          institution: inst || 'University',
+          degree: deg || parts[1],
+          start: years?.[0],
+          end: years?.[1] || years?.[0],
+          grade: gradeMatch ? gradeMatch[0] : undefined,
+        };
+        education.push(currentEdu);
+        if (education.length >= 6) break;
+      }
+    }
+  }
+
+  // 11. Projects Extraction
+  const projects: ParsedProfile['projects'] = [];
+  const projIdx = lines.findIndex((l) => /^(projects|key projects|personal projects|selected projects)\b/i.test(l.trim()));
+  if (projIdx !== -1) {
+    let currentProj: any = null;
+    for (let i = projIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^(experience|education|skills|certifications|languages|references)\b/i.test(line)) break;
+      if (/^[-•*▪▫◦⦿▸►✔–—]/.test(line)) {
+        if (currentProj) {
+          const text = line.replace(/^[-•*▪▫◦⦿▸►✔–—\s]+/, '').trim();
+          if (text) currentProj.bullets.push({ id: shortId(), text });
+        }
+      } else if (line.length >= 3 && line.length <= 80 && !/^page\b/i.test(line)) {
+        const urlMatch = line.match(/https?:\/\/[^\s]+/i);
+        const name = line.replace(/https?:\/\/[^\s]+/i, '').replace(/[|,\-–—]\s*$/, '').trim();
+        if (name) {
+          currentProj = {
+            id: shortId(),
+            name,
+            url: urlMatch ? urlMatch[0] : undefined,
+            bullets: [],
+          };
+          projects.push(currentProj);
+          if (projects.length >= 10) break;
+        }
+      }
+    }
+  }
+
+  // 12. Certifications Extraction
+  const certifications: ParsedProfile['certifications'] = [];
+  const certIdx = lines.findIndex((l) => /^(certifications|certificates|licenses & certifications|credentials)\b/i.test(l.trim()));
+  if (certIdx !== -1) {
+    for (let i = certIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^(experience|education|skills|projects|languages|references)\b/i.test(line)) break;
+      if (line.length >= 4 && !/^page\b/i.test(line)) {
+        const yearMatch = line.match(/\b(19\d\d|20\d\d)\b/);
+        const clean = line.replace(/\b(19\d\d|20\d\d)\b/, '').replace(/[|,\-–—\(\)]/g, ' ').trim();
+        const parts = clean.split(/\s{2,}|\bby\b|\bfrom\b/i).map((s) => s.trim()).filter(Boolean);
+        certifications.push({
+          id: shortId(),
+          name: parts[0] || clean,
+          issuer: parts[1] || undefined,
+          year: yearMatch ? yearMatch[0] : undefined,
+        });
+        if (certifications.length >= 10) break;
+      }
+    }
+  }
+
   return {
     fullName: fullName || '',
     headline: headline || undefined,
@@ -360,10 +770,10 @@ export function parseCvDeterministic(rawText: string): ParsedProfile {
     location: location || undefined,
     summary: summary || undefined,
     links,
-    skills: matchedSkills.slice(0, 25).map((name) => ({ name })),
-    experience: [],
-    education: [],
-    projects: [],
-    certifications: [],
+    skills: matchedSkills.slice(0, 30).map((name) => ({ name })),
+    experience,
+    education,
+    projects,
+    certifications,
   };
 }
