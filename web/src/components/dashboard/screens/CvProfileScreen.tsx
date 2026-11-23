@@ -70,6 +70,9 @@ export const CvProfileScreen: FC = () => {
   const facts: Array<{ key: string; label: string; value: string; raw: any; kind: 'text' | 'number' | 'select'; options?: Array<[string, string]>; apply: (v: string) => Record<string, unknown> }> = profile ? [
     { key: 'name', label: 'Name', value: profile.fullName || '', raw: profile.fullName, kind: 'text', apply: (v) => { const [first, ...rest] = v.trim().split(/\s+/); return { firstName: first || '', lastName: rest.join(' ') }; } },
     { key: 'headline', label: 'Headline', value: profile.headline || '', raw: profile.headline, kind: 'text', apply: (v) => ({ headline: v }) },
+    { key: 'email', label: 'Email', value: profile.email || '', raw: profile.email, kind: 'text', apply: (v) => ({ email: v }) },
+    { key: 'phone', label: 'Phone', value: profile.phone || '', raw: profile.phone, kind: 'text', apply: (v) => ({ phone: v }) },
+    { key: 'location', label: 'Location', value: profile.location || (profile.address?.city ? `${profile.address.city}, ${profile.address.country || ''}` : ''), raw: profile.location || (profile.address?.city ? `${profile.address.city}, ${profile.address.country || ''}` : ''), kind: 'text', apply: (v) => { const parts = v.split(',').map((s) => s.trim()); return { location: v, address: { city: parts[0] || v, country: parts[1] || '' } }; } },
     { key: 'yoe', label: 'Years of experience', value: profile.yearsOfExperience != null ? `${profile.yearsOfExperience} years` : '', raw: profile.yearsOfExperience ?? '', kind: 'number', apply: (v) => ({ yearsOfExperience: Number(v) }) },
     { key: 'edu', label: 'Education', value: EDU[profile.highestEducationLevel] || '', raw: profile.highestEducationLevel, kind: 'select', options: Object.entries(EDU), apply: (v) => ({ highestEducationLevel: v }) },
     { key: 'auth', label: 'Work authorisation', value: AUTH[profile.workAuthorization] || '', raw: profile.workAuthorization, kind: 'select', options: Object.entries(AUTH), apply: (v) => ({ workAuthorization: v }) },
@@ -78,6 +81,13 @@ export const CvProfileScreen: FC = () => {
   const filled = facts.filter((f) => f.value).length;
 
   const skills: string[] = [...(profile?.primarySkills ?? []), ...(profile?.toolsAndFrameworks ?? [])];
+  const linksList: Array<{ label: string; url: string }> = [
+    ...(profile?.linkedinUrl ? [{ label: 'LinkedIn', url: profile.linkedinUrl }] : []),
+    ...(profile?.githubUrl ? [{ label: 'GitHub', url: profile.githubUrl }] : []),
+    ...(profile?.portfolioUrl ? [{ label: 'Portfolio', url: profile.portfolioUrl }] : []),
+    ...(profile?.twitterUrl ? [{ label: 'X / Twitter', url: profile.twitterUrl }] : []),
+    ...((profile?.links as any[]) || []),
+  ];
   const exp: any[] = profile?.experience ?? [];
   const rulesDirty = profile && rules && (JSON.stringify(rules) !== JSON.stringify(profile.rules) || JSON.stringify(roles) !== JSON.stringify(profile.targetRoles ?? []) || JSON.stringify(blocked) !== JSON.stringify(profile.blockedCompanies ?? []) || mode !== (profile.remotePreference ?? 'any') || floor !== (profile.salaryFloor?.amount ? String(profile.salaryFloor.amount) : ''));
 
@@ -154,6 +164,18 @@ export const CvProfileScreen: FC = () => {
             )}
             {skills.length > 0 && (<><p style={{ margin: '18px 0 8px', fontSize: 12, color: '#5F6A74' }}>Skills J.A.V.I may mention</p>
               <ul aria-label="Skills" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>{skills.map((s) => <li key={s} style={{ height: 30, display: 'inline-flex', alignItems: 'center', padding: '0 12px', borderRadius: 999, background: '#F3F6F9', fontSize: 12, color: '#2E3338' }}>{s}</li>)}</ul></>)}
+            {linksList.length > 0 && (
+              <>
+                <p style={{ margin: '18px 0 8px', fontSize: 12, color: '#5F6A74' }}>Links & profiles</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {linksList.map((l) => (
+                    <a key={l.url} href={l.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px', borderRadius: 999, background: '#EFF6FF', color: '#1D4ED8', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>
+                      {l.label}: {l.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 30)}
+                    </a>
+                  ))}
+                </div>
+              </>
+            )}
           </Card>
         </div>
 
