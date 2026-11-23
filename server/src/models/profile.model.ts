@@ -109,6 +109,7 @@ export interface IProfile {
   userId: Types.ObjectId;
   /** draft until the user reviews the profile/parsed CV. Nothing is generated from a draft profile. */
   status: 'draft' | 'verified';
+  setupStep?: number;
 
   // Personal & Contact
   firstName?: string;
@@ -243,6 +244,7 @@ const profileSchema = new Schema<IProfile>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     status: { type: String, enum: ['draft', 'verified'], default: 'draft' },
+    setupStep: { type: Number, default: 1, min: 1, max: 9 },
 
     // Personal & Contact
     firstName: { type: String, default: '' },
