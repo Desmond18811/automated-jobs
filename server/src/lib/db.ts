@@ -25,7 +25,7 @@ export async function connectDb(): Promise<void> {
     setTimeout(() => {
       isConnecting = false;
       connectDb().catch(() => {});
-    }, 30_000);
+    }, 30_000).unref();
   } finally {
     isConnecting = false;
   }
