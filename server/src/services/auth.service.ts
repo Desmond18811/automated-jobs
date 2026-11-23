@@ -28,6 +28,7 @@ export interface SessionUser {
   email: string;
   name?: string;
   onboardingStage?: string;
+  setupStep?: number;
   isEmailVerified?: boolean;
   profileImage?: string;
 }
@@ -54,6 +55,7 @@ const toSessionUser = (user: any): SessionUser => ({
   email: user.email,
   name: user.name,
   onboardingStage: user.onboardingStage || 'completed',
+  setupStep: user.setupStep || 1,
   isEmailVerified: user.isEmailVerified ?? false,
   profileImage: user.profileImage,
 });
