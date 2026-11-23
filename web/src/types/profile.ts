@@ -134,6 +134,7 @@ export interface UserProfile {
   _id?: string;
   /** Only POST /profile/verify sets 'verified'. */
   status: 'draft' | 'verified';
+  setupStep?: number;
 
   // Personal & Contact
   firstName: string;
@@ -204,6 +205,7 @@ export interface UserProfile {
 
 export const EMPTY_PROFILE: UserProfile = {
   status: 'draft',
+  setupStep: 1,
   firstName: '',
   lastName: '',
   fullName: '',
