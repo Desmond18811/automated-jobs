@@ -24,7 +24,7 @@ const schema = z.object({
   STORAGE_DIR: z.string().default('./storage'),
 
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().default(900),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().default(600),
   // A session ends after this many days without use, or this many days after sign-in, whichever is first.
   SESSION_IDLE_DAYS: z.coerce.number().default(30),
   SESSION_ABSOLUTE_DAYS: z.coerce.number().default(90),

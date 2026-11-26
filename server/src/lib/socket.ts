@@ -6,7 +6,7 @@
 
 import http from 'node:http';
 import { Server, type Socket } from 'socket.io';
-import jwt from 'jsonwebtoken';
+import { verifyAccessToken } from '../middleware/auth';
 import { env } from '../config/env';
 import { logger } from './logger';
 
@@ -21,7 +21,19 @@ let io: Server | null = null;
 export function initSocketServer(httpServer: http.Server): Server {
   io = new Server(httpServer, {
     cors: {
-      origin: [env.APP_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+      origin: (requestOrigin, callback) => {
+        if (!requestOrigin) return callback(null, true);
+        const allowed = [env.APP_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+        if (
+          allowed.includes(requestOrigin) ||
+          requestOrigin.includes('ngrok') ||
+          requestOrigin.startsWith('http://localhost:') ||
+          requestOrigin.startsWith('http://127.0.0.1:')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, false);
+      },
       credentials: true,
       methods: ['GET', 'POST'],
     },
@@ -36,20 +48,13 @@ export function initSocketServer(httpServer: http.Server): Server {
         socket.handshake.auth?.token ||
         (socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '') ?? '');
 
-      if (!token) {
-        // Allow unauthenticated connection for guest / public events if needed, but no user room
-        return next();
-      }
-
-      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as { sub?: string };
-      if (decoded?.sub) {
-        socket.data.userId = decoded.sub;
-      }
+      const claims = token ? verifyAccessToken(token) : undefined;
+      if (!claims) return next(new Error('unauthorized'));
+      socket.data.userId = claims.sub;
       next();
     } catch (err: any) {
       logger.warn({ err: err?.message }, 'Socket.IO handshake authentication failed');
-      // Still proceed so client does not immediately reconnect in an infinite error loop
-      next();
+      next(new Error('unauthorized'));
     }
   });
 

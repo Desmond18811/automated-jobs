@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { asyncHandler } from '../lib/http';
-import { JobController } from '../controllers/job.controller';
+import { JobController, SavedJobController } from '../controllers/job.controller';
 
 const router = Router();
 const upload = multer({
@@ -13,6 +13,9 @@ router.get('/', asyncHandler(JobController.list));
 router.post('/manual', asyncHandler(JobController.manual));
 router.post('/links', asyncHandler(JobController.links));
 router.post('/import', upload.single('file'), asyncHandler(JobController.importJobs));
+router.get('/saved', asyncHandler(SavedJobController.list));
+router.post('/:id/save', asyncHandler(SavedJobController.save));
+router.delete('/:id/save', asyncHandler(SavedJobController.unsave));
 router.get('/:id', asyncHandler(JobController.getJob));
 
 export default router;

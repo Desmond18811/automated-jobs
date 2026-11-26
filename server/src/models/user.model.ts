@@ -6,6 +6,8 @@ export interface IUser {
   isEmailVerified?: boolean;
   onboardingStage?: 'otp_pending' | 'profile_setup' | 'completed';
   setupStep?: number;
+  isSetupCompleted?: boolean;
+  setupCompleted?: boolean;
   profileImage?: string;
   gmail?: { address?: string; refreshTokenEnc?: string; connectedAt?: Date; scopes?: string[] };
   consent?: { termsAcceptedAt?: Date };
@@ -22,6 +24,8 @@ const userSchema = new Schema<IUser>(
       default: 'otp_pending',
     },
     setupStep: { type: Number, default: 1, min: 1, max: 9 },
+    isSetupCompleted: { type: Boolean, default: false },
+    setupCompleted: { type: Boolean, default: false },
     profileImage: String,
     gmail: { address: String, refreshTokenEnc: String, connectedAt: Date, scopes: [String] },
     consent: { termsAcceptedAt: Date },

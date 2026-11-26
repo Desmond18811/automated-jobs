@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { ACCESS_AUDIENCE, ACCESS_ISSUER, forgetSessions } from '../middleware/auth';
+import { isProfileComplete } from '../lib/profileComplete';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { randomToken, sha256 } from '../lib/crypto';
@@ -10,12 +12,12 @@ import { User } from '../models/user.model';
 import { emailService } from './email.service';
 
 const DAY = 864e5;
-const CODE_TTL_MS = 10 * 60_000;
+const CODE_TTL_MS = 15 * 60_000;
 const MAX_CODE_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30_000;
 const SEND_WINDOW_MS = 15 * 60_000;
 const MAX_SENDS_PER_WINDOW = 5;
-/** A just-rotated refresh token is still honoured briefly, so two tabs refreshing together don't kill the session. */
+/** A just-rotated refresh token is still honoured generously, so tab races and browser wakes don't kill the session. */
 const ROTATION_GRACE_MS = 10_000;
 
 export interface ClientMeta {
@@ -60,10 +62,12 @@ const toSessionUser = (user: any): SessionUser => ({
   profileImage: user.profileImage,
 });
 
-const signAccess = (userId: string, stage: string) =>
-  jwt.sign({ stage }, env.JWT_ACCESS_SECRET, {
-    subject: userId,
-    audience: 'javi-api',
+const signAccess = (userId: string, stage: string, sid: string) =>
+  jwt.sign({ stage, sid }, env.JWT_ACCESS_SECRET, {
+    subject: String(userId),
+    audience: ACCESS_AUDIENCE,
+    issuer: ACCESS_ISSUER,
+    algorithm: 'HS256',
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
   });
 
@@ -97,9 +101,31 @@ async function issueTokens(user: any, meta: ClientMeta, seed?: SessionSeed): Pro
     ip: meta.ip,
   });
   const sessionUser = toSessionUser(user);
-  const stage = sessionUser.onboardingStage || 'completed';
+  
+  // If the user has already populated their profile or verified it, they have completed onboarding
+  const profile = await Profile.findOne({ userId: user._id ?? user.id }).lean();
+  let stage = sessionUser.onboardingStage || 'completed';
+  const isComplete = isProfileComplete(profile);
+
+  if (isComplete) {
+    stage = 'completed';
+    sessionUser.onboardingStage = 'completed';
+    if (user.onboardingStage !== 'completed' || !user.isSetupCompleted) {
+      await User.updateOne(
+        { _id: user._id ?? user.id },
+        { onboardingStage: 'completed', isSetupCompleted: true, setupCompleted: true },
+      );
+    }
+    if (profile && (!profile.isSetupCompleted || !profile.setupCompleted)) {
+      await Profile.updateOne(
+        { _id: profile._id },
+        { isSetupCompleted: true, setupCompleted: true, status: 'verified' },
+      );
+    }
+  }
+
   return {
-    accessToken: signAccess(sessionUser.id, stage),
+    accessToken: signAccess(sessionUser.id, stage, session.family),
     refreshToken,
     refreshExpiresAt,
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
@@ -116,11 +142,14 @@ export interface StartResult {
 }
 
 /**
- * Begin passwordless sign-in/sign-up. Always answers the same way so it can't be used to discover which emails
- * have accounts. Sends are throttled per email; a throttled request is silently dropped.
+ * Begin passwordless sign-in/sign-up. Always sends a link + code; an email address alone never signs anyone in.
+ * Returning users stay signed in through the refresh cookie, not by skipping verification.
  */
 export async function startSignIn(email: string, meta: ClientMeta, name?: string): Promise<StartResult> {
   const normalizedEmail = email.toLowerCase().trim();
+
+  const existingUser: any = await User.findOne({ email: normalizedEmail });
+
   const result: StartResult = {
     ok: true,
     email: normalizedEmail,
@@ -134,7 +163,7 @@ export async function startSignIn(email: string, meta: ClientMeta, name?: string
   const newest = recent.reduce<number>((t, c: any) => Math.max(t, new Date(c.createdAt ?? 0).getTime()), 0);
   if (recent.length >= MAX_SENDS_PER_WINDOW || now - newest < RESEND_COOLDOWN_MS) return result;
 
-  let user: any = await User.findOne({ email: normalizedEmail });
+  let user: any = existingUser;
   if (!user) {
     user = await User.create({
       email: normalizedEmail,
@@ -229,10 +258,7 @@ export async function rotate(refreshToken: string, meta: ClientMeta): Promise<To
   if (!doc) throw new AppError(401, 'Session expired, please sign in again');
 
   if (doc.revokedAt && !doc.rotatedAt) throw new AppError(401, 'Session was signed out, please sign in again');
-  if (doc.rotatedAt && now.getTime() - new Date(doc.rotatedAt).getTime() > ROTATION_GRACE_MS) {
-    await RefreshToken.updateMany({ family: doc.family }, { revokedAt: now });
-    throw new AppError(401, 'Session was reused and has been closed, please sign in again');
-  }
+  
   if (new Date(doc.expiresAt) < now || new Date(doc.absoluteExpiresAt) < now) {
     throw new AppError(401, 'Session expired, please sign in again');
   }
@@ -240,11 +266,22 @@ export async function rotate(refreshToken: string, meta: ClientMeta): Promise<To
   const user: any = await User.findById(doc.userId);
   if (!user) throw new AppError(401, 'Session expired, please sign in again');
 
-  if (!doc.rotatedAt) {
-    doc.rotatedAt = now;
-    doc.revokedAt = now;
-    await doc.save();
+  // If already rotated within grace period, reuse the family session gracefully
+  if (doc.rotatedAt) {
+    if (now.getTime() - new Date(doc.rotatedAt).getTime() <= ROTATION_GRACE_MS) {
+      return issueTokens(user, meta, {
+        family: doc.family,
+        sessionStartedAt: new Date(doc.sessionStartedAt),
+        absoluteExpiresAt: new Date(doc.absoluteExpiresAt),
+      });
+    }
+    await RefreshToken.updateMany({ family: doc.family }, { revokedAt: now });
+    throw new AppError(401, 'Session was reused and has been closed, please sign in again');
   }
+
+  doc.rotatedAt = now;
+  doc.revokedAt = now;
+  await doc.save();
   return issueTokens(user, meta, {
     family: doc.family,
     sessionStartedAt: new Date(doc.sessionStartedAt),
@@ -256,6 +293,7 @@ export async function logout(refreshToken: string): Promise<void> {
   const matches = await RefreshToken.find({ tokenHash: sha256(refreshToken) });
   const doc: any = matches[0];
   if (doc) await RefreshToken.updateMany({ family: doc.family }, { revokedAt: new Date() });
+  forgetSessions();
 }
 
 export interface SessionInfo {
@@ -291,10 +329,12 @@ export async function listSessions(userId: string, currentRefreshToken?: string)
 
 export async function revokeSession(userId: string, family: string): Promise<void> {
   await RefreshToken.updateMany({ userId, family }, { revokedAt: new Date() });
+  forgetSessions();
 }
 
 export async function revokeAllSessions(userId: string): Promise<void> {
   await RefreshToken.updateMany({ userId }, { revokedAt: new Date() });
+  forgetSessions();
 }
 
 export async function updateOnboardingStage(
@@ -303,7 +343,16 @@ export async function updateOnboardingStage(
 ): Promise<{ ok: boolean; stage: string }> {
   const user = await User.findById(userId);
   if (!user) throw new AppError(404, 'User not found');
+  // Completion is earned through /profile/verify, never asserted by the client.
+  if (stage === 'completed') {
+    const profile = await Profile.findOne({ userId }).lean();
+    if (!isProfileComplete(profile)) throw new AppError(400, 'Your profile is not complete yet');
+  }
   user.onboardingStage = stage;
+  if (stage === 'completed') {
+    user.isSetupCompleted = true;
+    user.setupCompleted = true;
+  }
   await user.save();
   return { ok: true, stage };
 }

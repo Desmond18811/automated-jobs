@@ -24,12 +24,12 @@ export function createApp() {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (
-          !origin ||
-          allowedOrigins.includes(origin) ||
-          origin.startsWith('http://localhost:') ||
-          origin.startsWith('http://127.0.0.1:')
-        ) {
+        const devLocal =
+          env.NODE_ENV !== 'production' &&
+          !!origin &&
+          (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+        const isNgrok = !!origin && (origin.endsWith('.ngrok-free.app') || origin.endsWith('.ngrok.app') || origin.includes('ngrok'));
+        if (!origin || allowedOrigins.includes(origin) || devLocal || isNgrok) {
           return callback(null, true);
         }
         return callback(null, false);
@@ -48,10 +48,9 @@ export function createApp() {
     status: 200,
     message: "Welcome to J.A.V.I backend  🟢"
   }));
+  app.get('/health', (_req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
-  // API Routes mounted on /api and root alias for flexible routing
   app.use('/api', apiRouter);
-  app.use(apiRouter);
 
   app.use((_req, _res, next) => next(new AppError(404, 'Not found')));
 

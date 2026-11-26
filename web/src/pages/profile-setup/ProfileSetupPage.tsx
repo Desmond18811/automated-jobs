@@ -1,7 +1,7 @@
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { JaviBrandMark } from '@/assets/logos';
-import { authApi, authStateStorage, profileApi, SETUP_STEP_COUNT } from '@/api';
+import { API_BASE, authApi, authStateStorage, profileApi, tokenStorage } from '@/api';
 import { useUserProfile } from '@/context/ProfileContext';
 import { useIsMobile } from '@/hooks/useStageScale';
 import type { UserProfile } from '@/types/profile';
@@ -36,34 +36,83 @@ export const ProfileSetupPage: FC = () => {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { refreshProfile } = useUserProfile();
-  const { draft, patch, saveStep, loading, loadError, reload, adopt } = useSetupDraft();
-  const [index, setIndex] = useState(() => Math.min(authStateStorage.getSetupStep(), SETUP_STEP_COUNT) - 1);
+  const { draft, patch, saveStep, draftPayload, loading, loadError, reload, adopt } = useSetupDraft();
+  // The server is the source of truth for where the user stopped; nothing renders until it has answered.
+  const [index, setIndex] = useState(0);
+  const [ready, setReady] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // Sync step from server profile if available
   useEffect(() => {
-    if (!loading && draft.setupStep && draft.setupStep >= 1 && draft.setupStep <= STEPS.length) {
-      const serverStep = draft.setupStep - 1;
-      const localStep = authStateStorage.getSetupStep() - 1;
-      const target = Math.max(serverStep, localStep);
-      if (target >= 0 && target < STEPS.length && target !== index) {
-        setIndex(target);
-        authStateStorage.setSetupStep(target + 1);
-      }
-    }
-  }, [loading, draft.setupStep]);
+    if (loading || loadError || ready) return;
+    const at = Math.min(Math.max(draft.setupStep || 1, 1), STEPS.length) - 1;
+    setIndex(at);
+    setReady(true);
+  }, [loading, loadError, ready, draft.setupStep]);
 
   const step = STEPS[index];
   const isLast = index === STEPS.length - 1;
+
+  // Every write goes through one queue so a slow earlier request can never land after a newer one.
+  const writes = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = (fn: () => Promise<unknown>) => (writes.current = writes.current.then(fn).catch(() => null));
+  const lastSaved = useRef('');
+
+  const payload = useMemo(() => draftPayload(step), [draftPayload, step]);
+  const payloadRef = useRef(payload);
+  payloadRef.current = payload;
+  const indexRef = useRef(index);
+  indexRef.current = index;
+
+  // Arriving on a step: what's on screen is what the server has.
+  useEffect(() => {
+    lastSaved.current = JSON.stringify(payloadRef.current);
+  }, [index, ready]);
+
+  // Autosave the current step shortly after the user stops typing, so closing the tab loses nothing.
+  useEffect(() => {
+    if (!ready || loading || step.fields.length === 0) return;
+    const json = JSON.stringify(payload);
+    if (json === lastSaved.current) return;
+    const t = setTimeout(() => {
+      void enqueue(() => profileApi.update({ ...payload, setupStep: index + 1 } as any)).then(() => {
+        lastSaved.current = json;
+      });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload, ready, loading, step, index]);
+
+  // Last chance: when the tab is hidden or closed, push unsaved edits with a request that survives the page.
+  useEffect(() => {
+    const flush = () => {
+      const json = JSON.stringify(payloadRef.current);
+      const token = tokenStorage.get();
+      if (!token || json === lastSaved.current || !Object.keys(payloadRef.current).length) return;
+      lastSaved.current = json;
+      void fetch(`${API_BASE}/profile`, {
+        method: 'PUT',
+        keepalive: true,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...payloadRef.current, setupStep: indexRef.current + 1 }),
+      }).catch(() => undefined);
+    };
+    const onVisibility = () => document.visibilityState === 'hidden' && flush();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, []);
 
   const goTo = (i: number) => {
     const next = Math.max(0, Math.min(STEPS.length - 1, i));
     setIndex(next);
     setProblems([]);
-    authStateStorage.setSetupStep(next + 1);
-    profileApi.update({ setupStep: next + 1 }).catch(() => null);
+    void enqueue(() => profileApi.update({ setupStep: next + 1 }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -94,10 +143,12 @@ export const ProfileSetupPage: FC = () => {
     if (ok) goTo(index + 1);
   };
 
-  // Going back saves too when the step is complete, but never blocks: half-filled steps keep their draft.
+  // Going back saves whatever is valid so far and never blocks: half-filled rows stay on screen and are retried.
   const back = async () => {
-    if (!(VALIDATORS[step.id]?.(draft) ?? []).length) {
-      await saveStep(step, { ...(NORMALIZERS[step.id]?.(draft) ?? {}), setupStep: Math.max(1, index) }).catch(() => undefined);
+    const json = JSON.stringify(payload);
+    if (json !== lastSaved.current && Object.keys(payload).length) {
+      await enqueue(() => profileApi.update(payload as any));
+      lastSaved.current = json;
     }
     goTo(index - 1);
   };
@@ -112,6 +163,7 @@ export const ProfileSetupPage: FC = () => {
       authStateStorage.setStage('completed');
       try {
         localStorage.removeItem('javi_setup_step');
+        
       } catch {
         // storage unavailable; the step index is only a convenience
       }
@@ -228,7 +280,7 @@ export const ProfileSetupPage: FC = () => {
           zIndex: 2,
         }}
       >
-        {loading ? (
+        {loading || (!ready && !loadError) ? (
           <p style={{ color: C.muted, fontSize: 14 }}>Loading your profile…</p>
         ) : loadError ? (
           <Notice tone="danger">
@@ -242,7 +294,7 @@ export const ProfileSetupPage: FC = () => {
         )}
       </main>
 
-      {!loading && !loadError && (
+      {ready && !loadError && (
         <footer
           style={{
             position: 'sticky',

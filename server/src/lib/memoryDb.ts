@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Types } from 'mongoose';
 import { User } from '../models/user.model';
 import { Profile } from '../models/profile.model';
@@ -466,6 +468,14 @@ export function activateMemoryDb(): void {
   memoryCollection(RefreshToken as any, memoryTokens, false);
   memoryCollection(LoginChallenge as any, [], true);
 
+  const updateOneIn = (rows: any[]) => (query: any, update: any) => {
+    const hit = rows.find((r) => Object.entries(query || {}).every(([k, v]) => String(r[k]) === String(v)));
+    if (hit) Object.assign(hit, (update && update.$set) || update);
+    return Promise.resolve({ matchedCount: hit ? 1 : 0, modifiedCount: hit ? 1 : 0 });
+  };
+  (User as any).updateOne = updateOneIn(memoryUsers);
+  (Profile as any).updateOne = updateOneIn(memoryProfiles);
+
   // 3. Profile
   (Profile as any).findOne = (query: any) => {
     let p = memoryProfiles.find(
@@ -639,7 +649,7 @@ export function activateMemoryDb(): void {
   };
   (Notification as any).findOneAndUpdate = (query: any, update: any) => {
     const found = memoryNotifications.find(
-      (n) => String(n._id) === String(query._id) && (!query.userId || String(n.userId) === String(query.userId)),
+      (n) => String(n._id) === String(query._id) && (String(n.userId) === String(query.userId)),
     );
     if (found) {
       if (update.readAt) found.readAt = update.readAt;
@@ -650,7 +660,7 @@ export function activateMemoryDb(): void {
   (Notification as any).updateMany = (query: any, update: any) => {
     let count = 0;
     for (const n of memoryNotifications) {
-      if (!query.userId || String(n.userId) === String(query.userId)) {
+      if (String(n.userId) === String(query.userId)) {
         if (query.readAt === null ? !n.readAt : true) {
           if (update.readAt) n.readAt = update.readAt;
           count++;
@@ -661,7 +671,7 @@ export function activateMemoryDb(): void {
   };
   (Notification as any).deleteOne = (query: any) => {
     const idx = memoryNotifications.findIndex(
-      (n) => String(n._id) === String(query._id) && (!query.userId || String(n.userId) === String(query.userId)),
+      (n) => String(n._id) === String(query._id) && (String(n.userId) === String(query.userId)),
     );
     if (idx !== -1) memoryNotifications.splice(idx, 1);
     return Promise.resolve({ deletedCount: idx !== -1 ? 1 : 0 });
@@ -786,4 +796,73 @@ export function activateMemoryDb(): void {
     Promise.resolve(
       asDoc(memoryBusinessServices, { hourlyRate: 7500, fxRate: 1550, marginPct: 30, guarantees: { ownership: true, liveByDays: 21 }, caseStudies: [], ...doc }),
     );
+
+  persistMemoryStore({
+    users: memoryUsers,
+    profiles: memoryProfiles,
+    jobs: memoryJobs,
+    applications: memoryApplications,
+    tasks: memoryTasks,
+    notifications: memoryNotifications,
+    leads: memoryBusinessLeads,
+    tokens: memoryTokens,
+  });
+}
+
+/**
+ * Dev-only durability for the in-memory fallback: without this every server restart (tsx watch restarts on each
+ * edit) wipes the refresh tokens and signs everybody out. State is loaded from server/.data/memory.json on boot
+ * and written back shortly after it changes.
+ */
+function persistMemoryStore(stores: Record<string, any[]>): void {
+  if (process.env.MEMORY_DB_PERSIST === '0') return;
+  const file = path.resolve(__dirname, '../../.data/memory.json');
+  const revive = (key: string, v: any) => {
+    if (typeof v !== 'string') return v;
+    if (/^[0-9a-f]{24}$/i.test(v) && (key === '_id' || key === 'id' || /Id$/.test(key))) return new Types.ObjectId(v);
+    if (/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v)) return new Date(v);
+    return v;
+  };
+
+  try {
+    if (fs.existsSync(file)) {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'), revive);
+      for (const [name, rows] of Object.entries(stores)) {
+        if (!Array.isArray(saved[name])) continue;
+        for (const r of saved[name]) {
+          // Restored rows must behave like documents: controllers call set(), toObject(), markModified() and read id.
+          const hidden = (k: string, value: any) => {
+            if (typeof r[k] === 'undefined') Object.defineProperty(r, k, { value, enumerable: false, writable: true, configurable: true });
+          };
+          hidden('save', function (this: any) { return Promise.resolve(this); });
+          hidden('set', function (this: any, k: any, v?: any) { return typeof k === 'object' ? Object.assign(this, k) : (this[k] = v); });
+          hidden('markModified', () => undefined);
+          hidden('toObject', function (this: any) { return JSON.parse(JSON.stringify(this), revive); });
+          if (r._id && typeof r.id === 'undefined') Object.defineProperty(r, 'id', { get() { return String(this._id); }, enumerable: false, configurable: true });
+        }
+        rows.splice(0, rows.length, ...saved[name]);
+      }
+      logger.info('[MemoryDb] Restored persisted dev data from .data/memory.json');
+    }
+  } catch (err) {
+    logger.warn({ err }, '[MemoryDb] Could not restore persisted data; starting fresh.');
+  }
+
+  let last = '';
+  const save = () => {
+    try {
+      const out: Record<string, any[]> = {};
+      for (const [name, rows] of Object.entries(stores)) out[name] = rows.map((r) => (typeof r?.toObject === 'function' ? r.toObject() : r));
+      const json = JSON.stringify(out);
+      if (json === last) return;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, json);
+      last = json;
+    } catch {
+      /* best effort */
+    }
+  };
+  setInterval(save, 1500).unref();
+  process.on('beforeExit', save);
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => { save(); process.exit(0); });
 }

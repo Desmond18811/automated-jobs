@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { AppError, parseBody } from '../lib/http';
 import { currentUser } from '../middleware/auth';
+import { isProfileComplete } from '../lib/profileComplete';
 import { User } from '../models/user.model';
+import { Profile } from '../models/profile.model';
 import {
   listSessions,
   logout,
@@ -51,11 +53,13 @@ const replyWithTokens = (res: Response, tokens: Tokens, status = 200) =>
     .cookie(COOKIE, tokens.refreshToken, {
       ...baseCookie,
       maxAge: Math.max(0, tokens.refreshExpiresAt.getTime() - Date.now()),
+      expires: tokens.refreshExpiresAt,
     })
     .status(status)
     .json({
       accessToken: tokens.accessToken,
       expiresIn: tokens.expiresIn,
+      refreshExpiresAt: tokens.refreshExpiresAt,
       user: tokens.user,
       stage: tokens.stage,
     });
@@ -113,16 +117,36 @@ export class AuthController {
   }
 
   static async me(req: Request, res: Response) {
-    const user = await User.findById(currentUser(req)).lean();
+    const userId = currentUser(req);
+    const user = await User.findById(userId).lean();
     if (!user) throw new AppError(404, 'User not found');
+
+    const profile = await Profile.findOne({ userId }).lean();
+    let stage = user.onboardingStage || 'completed';
+    const isCompleted = isProfileComplete(profile);
+
+    if (isCompleted) {
+      stage = 'completed';
+      if (user.onboardingStage !== 'completed' || !user.isSetupCompleted) {
+        await User.updateOne({ _id: userId }, { onboardingStage: 'completed', isSetupCompleted: true, setupCompleted: true });
+      }
+      if (profile && (!profile.isSetupCompleted || !profile.setupCompleted)) {
+        await Profile.updateOne({ _id: profile._id }, { isSetupCompleted: true, setupCompleted: true, status: 'verified' });
+      }
+    }
+
     res.json({
       id: user._id,
       email: user.email,
       name: user.name,
       isEmailVerified: user.isEmailVerified ?? false,
-      onboardingStage: user.onboardingStage || 'completed',
+      onboardingStage: stage,
       setupStep: user.setupStep || 1,
       profileImage: user.profileImage,
+      hasProfile: !!profile,
+      profileStatus: profile?.status,
+      isSetupCompleted: isCompleted,
+      setupCompleted: isCompleted,
     });
   }
 }

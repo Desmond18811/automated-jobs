@@ -1,5 +1,7 @@
-import type { FC, ReactNode } from 'react';
+import { useState, useEffect, type FC, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { tokenStorage } from '@/api';
+import { ensureSession } from '@/lib/session';
 import {
   CalendarLogo,
   FiverrLogo,
@@ -132,6 +134,10 @@ const CHIPS: ChipItem[] = [
 
 export const Hero: FC = () => {
   const isMobile = useIsMobile();
+  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken());
+  useEffect(() => {
+    void ensureSession().then((ok) => setIsSignedIn(ok));
+  }, []);
 
   if (isMobile) {
     return (
@@ -251,24 +257,24 @@ export const Hero: FC = () => {
           }}
         >
           <Link
-            to="/signin"
+            to={isSignedIn ? "/dash" : "/signin"}
             className="jj-btn-primary"
             style={{
               flex: 1,
               fontSize: 12,
               fontWeight: 600,
               color: '#fff',
-              background: '#0b0b0c',
+              background: isSignedIn ? '#2563EB' : '#0b0b0c',
               borderRadius: 10,
               padding: '0 12px',
               height: 40,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,.18)',
+              boxShadow: isSignedIn ? '0 4px 12px rgba(37,99,235,.25)' : '0 4px 12px rgba(0,0,0,.18)',
             }}
           >
-            Upload your CV
+            {isSignedIn ? 'Go to Dashboard →' : 'Upload your CV'}
           </Link>
           <Link
             to="/how"
@@ -501,22 +507,22 @@ export const Hero: FC = () => {
           }}
         >
           <Link
-            to="/signin"
+            to={isSignedIn ? "/dash" : "/signin"}
             className="jj-btn-primary"
             style={{
               fontSize: 11.5,
-              fontWeight: 500,
+              fontWeight: 600,
               color: '#fff',
-              background: '#0b0b0c',
+              background: isSignedIn ? '#2563EB' : '#0b0b0c',
               borderRadius: 9,
-              padding: '0 15px',
-              height: 33,
+              padding: '0 18px',
+              height: 35,
               display: 'flex',
               alignItems: 'center',
-              boxShadow: '0 4px 10px rgba(0,0,0,.15)',
+              boxShadow: isSignedIn ? '0 4px 12px rgba(37,99,235,.25)' : '0 4px 10px rgba(0,0,0,.15)',
             }}
           >
-            Upload your CV
+            {isSignedIn ? 'Go to Dashboard →' : 'Upload your CV'}
           </Link>
           <Link
             to="/how"

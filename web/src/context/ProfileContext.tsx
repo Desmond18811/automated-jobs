@@ -10,25 +10,11 @@ interface ProfileContextType {
   resetToDefault: () => void;
 }
 
-const STORAGE_KEY = 'javi_user_profile_v1';
-
 const ProfileContext = createContext<ProfileContextType | null>(null);
 
 export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [profile, setProfileState] = useState<UserProfile>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.fullName || parsed.firstName || parsed.email) {
-          return { ...EMPTY_PROFILE, ...parsed };
-        }
-      }
-    } catch (err) {
-      console.warn('Could not load profile from localStorage', err);
-    }
-    return EMPTY_PROFILE;
-  });
+  // Held in memory only: the profile is personal data and is never cached on disk.
+  const [profile, setProfileState] = useState<UserProfile>(EMPTY_PROFILE);
 
   /** The server is the source of truth: replace local state with GET /profile, keeping only schema defaults underneath. */
   const refreshProfile = async () => {
@@ -44,7 +30,7 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useEffect(() => {
-    void refreshProfile();
+    if (tokenStorage.hasToken()) void refreshProfile();
     // Follow the session: load the profile when someone signs in (or the token is silently renewed after a
     // gap), and wipe the cached copy on sign-out so the next person never sees it.
     let hadToken = tokenStorage.hasToken();
@@ -52,25 +38,12 @@ export const ProfileProvider: FC<{ children: ReactNode }> = ({ children }) => {
       if (!token) {
         hadToken = false;
         setProfileState(EMPTY_PROFILE);
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch {
-          /* storage unavailable */
-        }
       } else if (!hadToken) {
         hadToken = true;
         void refreshProfile();
       }
     });
   }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-    } catch (err) {
-      console.warn('Could not save profile to localStorage', err);
-    }
-  }, [profile]);
 
   const updateProfile = (partial: Partial<UserProfile>) => {
     setProfileState((prev) => {

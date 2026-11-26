@@ -43,7 +43,7 @@ router.post(
 
 /** Twilio signs each webhook: base64(HMAC-SHA1(authToken, url + sorted key/value pairs)). */
 function validTwilioSignature(url: string, params: Record<string, string>, signature: string | undefined): boolean {
-  if (!env.TWILIO_AUTH_TOKEN) return true; // not configured: dev only
+  if (!env.TWILIO_AUTH_TOKEN) return env.NODE_ENV !== 'production'; // unconfigured: dev only, fail closed in production
   if (!signature) return false;
   const data = url + Object.keys(params).sort().map((k) => k + params[k]).join('');
   const expected = crypto.createHmac('sha1', env.TWILIO_AUTH_TOKEN).update(data).digest('base64');

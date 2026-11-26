@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    path { fill: #0b0b0c; }
+    @media (prefers-color-scheme: dark) {
+      path { fill: #ffffff; }
+    }
+  </style>
+  <!-- Top-Left petal (sharp at center bottom-right) -->
+  <path d="M 8 1 A 7 7 0 0 1 15 8 L 15 15 L 8 15 A 7 7 0 0 1 1 8 A 7 7 0 0 1 8 1 Z" />
+  <!-- Top-Right petal (sharp at center bottom-left) -->
+  <path d="M 24 1 A 7 7 0 0 1 31 8 A 7 7 0 0 1 24 15 L 17 15 L 17 8 A 7 7 0 0 1 24 1 Z" />
+  <!-- Bottom-Left petal (sharp at center top-right) -->
+  <path d="M 8 17 L 15 17 L 15 24 A 7 7 0 0 1 8 31 A 7 7 0 0 1 1 24 A 7 7 0 0 1 8 17 Z" />
+  <!-- Bottom-Right petal (sharp at center top-left) -->
+  <path d="M 17 17 L 24 17 A 7 7 0 0 1 31 24 A 7 7 0 0 1 24 31 A 7 7 0 0 1 17 24 Z" />
+</svg>

@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 process.env.NODE_ENV = 'test';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app';
@@ -173,12 +174,36 @@ async function main() {
   const me = await fetch(base + '/auth/me', { headers: { Authorization: `Bearer ${body.accessToken}` } });
   check('GET /auth/me works with the access token', me.status === 200 && ((await me.json()) as any).email === he);
 
-  for (const path of ['/auth/register', '/auth/login', '/auth/google', '/auth/verify-otp', '/auth/forgot-password', '/auth/reset-password', '/auth/resend-otp']) {
+  for (const path of ['/auth/register', '/auth/login', '/auth/google', '/auth/verify-otp', '/auth/forgot-password', '/auth/reset-password', '/auth/resend-otp', '/auth/auto-session']) {
     const r = await post(path, { email: he, password: 'password123', otp: '123456' });
     check(`retired ${path} no longer exists`, r.status === 404, r.status);
   }
+  const auto = await fetch(base + '/auth/auto-session', { headers: { Accept: 'application/json' } });
+  check('GET /auth/auto-session is gone (no credential-less sign-in)', auto.status === 404, auto.status);
+  const noEmailRefresh = await post('/auth/refresh', { email: he });
+  check('refresh with only an email is refused', noEmailRefresh.status === 401, noEmailRefresh.status);
   const master = await post('/auth/verify', { token: tokenOf(hmail.link), code: '123456' });
   check('no master code bypass', master.status === 400);
+
+  const auth = { Authorization: `Bearer ${body.accessToken}` };
+  const jobs = await fetch(base + '/jobs', { headers: auth });
+  check('an account that has not finished setup is refused (403) on /jobs', jobs.status === 403, jobs.status);
+  const apps = await fetch(base + '/applications', { headers: auth });
+  check('...and on /applications', apps.status === 403, apps.status);
+  const selfDone = await fetch(base + '/auth/onboarding-stage', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth }, body: JSON.stringify({ stage: 'completed' }) });
+  check('a client cannot mark itself completed with an empty profile', selfDone.status === 400, selfDone.status);
+  const noTok = await fetch(base + '/jobs');
+  check('no token is 401', noTok.status === 401);
+  const junk = await fetch(base + '/jobs', { headers: { Authorization: 'Bearer abc.def.ghi' } });
+  check('garbage token is 401', junk.status === 401);
+  const forged = jwt.sign({ sid: 'x' }, 'wrong-secret', { subject: 'u1', audience: 'javi-api', issuer: 'javi' });
+  const forgedRes = await fetch(base + '/auth/me', { headers: { Authorization: `Bearer ${forged}` } });
+  check('a token signed with another secret is 401', forgedRes.status === 401);
+  const evil = await post('/auth/refresh', {}, { Cookie: cookie, Origin: 'https://evil.example' });
+  check('cross-site refresh is blocked', evil.status === 403, evil.status);
+  const out = await post('/auth/logout', {}, { Cookie: cookie });
+  const afterOut = await fetch(base + '/auth/me', { headers: auth });
+  check('logout kills the access token immediately', out.status === 204 && afterOut.status === 401, [out.status, afterOut.status]);
 
   server.close();
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll passwordless auth checks passed');

@@ -142,6 +142,7 @@ export const UpdateProfileSchema = z
         timezone: z.string().refine(isValidTimeZone, 'Unknown time zone'),
       }).refine((h) => h.end > h.start, 'end must be after start'),
       weekdaysOnly: z.boolean(),
+      plan: z.enum(['pro', 'pro_max', 'enterprise']).optional(),
     }).partial(),
   })
   .partial();
@@ -165,7 +166,17 @@ function generateInitialsAvatar(name: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-/** Fill the top-level fields the setup UI reads (names, social URLs, address, career) from what the parsers return. */
+const TOOL_RE = /^(git|github|gitlab|docker|figma|jira|aws|gcp|azure|kubernetes|postman|vs ?code|linux|webpack|vite|redis|graphql|ci\/cd|github actions|notion|slack|excel|tableau|power bi|photoshop|illustrator|sketch)$/i;
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(/^https?:/i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+/** Derive the top-level fields the setup UI reads from what the parsers return. Only real derivations: nothing is invented. */
 export function enrichParsed(parsed: any) {
   const out = { ...parsed };
   if (out.fullName && !out.firstName) {
@@ -175,136 +186,49 @@ export function enrichParsed(parsed: any) {
   }
   for (const link of Array.isArray(out.links) ? out.links : []) {
     const url = String(link?.url || '');
-    if (!out.linkedinUrl && /linkedin\.com/i.test(url)) out.linkedinUrl = url;
-    else if (!out.githubUrl && /github\.com/i.test(url)) out.githubUrl = url;
-    else if (!out.twitterUrl && /(twitter|x)\.com/i.test(url)) out.twitterUrl = url;
-    else if (!out.portfolioUrl && /^https?:/i.test(url)) out.portfolioUrl = url;
+    const host = hostOf(url);
+    if (!host) continue;
+    if (!out.linkedinUrl && host.endsWith('linkedin.com')) out.linkedinUrl = url;
+    else if (!out.githubUrl && host.endsWith('github.com')) out.githubUrl = url;
+    else if (!out.twitterUrl && (host === 'twitter.com' || host === 'x.com')) out.twitterUrl = url;
+    else if (!out.portfolioUrl && !/linkedin\.com|github\.com|twitter\.com|^x\.com$/.test(host)) out.portfolioUrl = url;
   }
 
-  // Avatar / Picture auto-generation from candidate initials
-  if (!out.avatarUrl && (out.fullName || out.firstName)) {
-    out.avatarUrl = generateInitialsAvatar(out.fullName || `${out.firstName || ''} ${out.lastName || ''}`);
-  }
-
-  // Address parsing from location
-  if (out.location && (!out.address || !out.address.city || !out.address.country)) {
-    const parts = String(out.location).split(',').map((s) => s.trim()).filter(Boolean);
+  // "City, Country" or "City, State, Country" only; a lone word could be a city or a country, so it is left alone.
+  if (out.location && !out.address?.city) {
+    const parts = String(out.location).split(',').map((x) => x.trim()).filter(Boolean);
     if (parts.length >= 2) {
-      out.address = {
-        street: out.address?.street || '',
-        city: parts[0],
-        state: parts.length > 2 ? parts[1] : (out.address?.state || ''),
-        postalCode: out.address?.postalCode || '',
-        country: parts[parts.length - 1],
-      };
-    } else if (parts.length === 1) {
-      const loc = parts[0];
-      if (/nigeria/i.test(loc)) out.address = { street: '', city: 'Lagos', state: 'Lagos', postalCode: '', country: 'Nigeria' };
-      else if (/ghana/i.test(loc)) out.address = { street: '', city: 'Accra', state: '', postalCode: '', country: 'Ghana' };
-      else if (/kenya/i.test(loc)) out.address = { street: '', city: 'Nairobi', state: '', postalCode: '', country: 'Kenya' };
-      else if (/united kingdom|uk\b/i.test(loc)) out.address = { street: '', city: 'London', state: '', postalCode: '', country: 'United Kingdom' };
-      else if (/united states|usa\b/i.test(loc)) out.address = { street: '', city: 'New York', state: 'NY', postalCode: '', country: 'United States' };
-      else out.address = { street: '', city: loc, state: '', postalCode: '', country: loc };
+      out.address = { street: '', city: parts[0], state: parts.length > 2 ? parts[1] : '', postalCode: '', country: parts[parts.length - 1] };
     }
   }
 
-  // Current title & current company from first experience or headline
-  if (Array.isArray(out.experience) && out.experience.length > 0) {
-    const recent = out.experience[0];
-    if (recent.title && (!out.currentTitle || out.currentTitle === 'Role')) out.currentTitle = recent.title;
-    if (recent.company && (!out.currentCompany || out.currentCompany === 'Company')) out.currentCompany = recent.company;
-  } else if (!out.currentTitle && out.headline) {
-    out.currentTitle = out.headline;
+  // The current job is the one the CV marks as current; otherwise there is none to report.
+  const jobs: any[] = Array.isArray(out.experience) ? out.experience : [];
+  const current = jobs.find((e) => e.current);
+  if (current) {
+    if (current.title) out.currentTitle = current.title;
+    if (current.company) out.currentCompany = current.company;
   }
 
-  // Target roles from title or headline
-  if (!out.targetRoles || (Array.isArray(out.targetRoles) && out.targetRoles.length === 0)) {
-    const candidateRole = out.currentTitle || out.headline;
-    if (candidateRole) {
-      const roleClean = String(candidateRole).split(/[·|•,-]/)[0].trim();
-      if (roleClean && roleClean.length >= 2) {
-        out.targetRoles = [roleClean];
-      }
-    }
+  // Years of experience from the span of dated jobs.
+  const yearOf = (v?: string) => {
+    const m = String(v || '').match(/\b(19|20)\d\d\b/);
+    return m ? Number(m[0]) : undefined;
+  };
+  const starts = jobs.map((e) => yearOf(e.start)).filter((y): y is number => y !== undefined);
+  if (starts.length) {
+    const nowYear = new Date().getFullYear();
+    const ends = jobs.map((e) => (e.current ? nowYear : yearOf(e.end))).filter((y): y is number => y !== undefined);
+    const span = Math.max(...ends, ...starts) - Math.min(...starts);
+    out.yearsOfExperience = Math.max(0, Math.min(40, span));
   }
 
-  // Preferred job locations from candidate location or recent job location
-  if (!out.locations || (Array.isArray(out.locations) && out.locations.length === 0)) {
-    const loc = out.location || out.experience?.[0]?.location || (out.address?.city ? `${out.address.city}${out.address.country ? `, ${out.address.country}` : ''}` : '');
-    if (loc) out.locations = [loc];
+  // Skills: the parser's atomic list, with well-known tools separated out.
+  if (Array.isArray(out.skills) && out.skills.length) {
+    const names: string[] = out.skills.map((x: any) => (typeof x === 'string' ? x : x.name)).filter(Boolean);
+    out.toolsAndFrameworks = names.filter((n) => TOOL_RE.test(n));
+    out.primarySkills = names.filter((n) => !TOOL_RE.test(n));
   }
-
-  // Years of experience from experience dates
-  if (out.yearsOfExperience == null) {
-    if (Array.isArray(out.experience) && out.experience.length > 0) {
-      const allYears: number[] = [];
-      for (const exp of out.experience) {
-        const s = String(exp.start || '').match(/\b(19\d\d|20\d\d)\b/g);
-        const e = String(exp.end || '').match(/\b(19\d\d|20\d\d)\b/g);
-        if (s) allYears.push(...s.map(Number));
-        if (e) allYears.push(...e.map(Number));
-        if (exp.current) allYears.push(new Date().getFullYear());
-      }
-      if (allYears.length >= 2) {
-        const diff = Math.max(1, Math.max(...allYears) - Math.min(...allYears));
-        out.yearsOfExperience = Math.min(40, diff);
-      } else {
-        out.yearsOfExperience = Math.min(30, Math.max(1, Math.round(out.experience.length * 1.5)));
-      }
-    }
-  }
-  if (out.yearsOfExperience != null && !out.inferredLevel) {
-    const y = out.yearsOfExperience;
-    out.inferredLevel = y < 1 ? 'entry' : y <= 2 ? 'junior' : y <= 5 ? 'mid' : y <= 9 ? 'senior' : 'expert';
-    if (!out.validatedLevel) out.validatedLevel = out.inferredLevel;
-  }
-
-  // Highest education level from education
-  if (!out.highestEducationLevel && Array.isArray(out.education) && out.education.length > 0) {
-    const degText = out.education.map((e: any) => `${e.degree || ''} ${e.field || ''}`).join(' ').toLowerCase();
-    if (/phd|doctorate|doctor of/i.test(degText)) out.highestEducationLevel = 'doctorate';
-    else if (/master|mba|msc|m\.s\b|m\.a\b|postgraduate/i.test(degText)) out.highestEducationLevel = 'master';
-    else if (/bachelor|bsc|b\.s\b|b\.a\b|btech|b\.eng|undergraduate/i.test(degText)) out.highestEducationLevel = 'bachelor';
-    else if (/associate|hnd|ond|diploma/i.test(degText)) out.highestEducationLevel = 'associate';
-    else if (/bootcamp|certificate|nanodegree/i.test(degText)) out.highestEducationLevel = 'bootcamp';
-    else out.highestEducationLevel = 'bachelor';
-  }
-
-  // Skills
-  if (Array.isArray(out.skills) && out.skills.length > 0) {
-    const skillNames: string[] = out.skills.map((s: any) => (typeof s === 'string' ? s : s.name)).filter(Boolean);
-    if (!out.primarySkills || !out.primarySkills.length) {
-      out.primarySkills = skillNames.slice(0, 10);
-    }
-    if (!out.secondarySkills || !out.secondarySkills.length) {
-      out.secondarySkills = skillNames.slice(10, 20);
-    }
-    if (!out.toolsAndFrameworks || !out.toolsAndFrameworks.length) {
-      const toolKeywords = ['git', 'docker', 'figma', 'jira', 'aws', 'kubernetes', 'postman', 'vscode', 'linux', 'webpack', 'vite', 'redis', 'graphql', 'rest', 'ci/cd', 'github actions'];
-      out.toolsAndFrameworks = skillNames.filter((s) => toolKeywords.some((tk) => s.toLowerCase().includes(tk)));
-    }
-  }
-
-  // Elevator pitch
-  if (!out.elevatorPitch && out.headline) {
-    const skillsSnippet = out.primarySkills?.slice(0, 3).join(', ');
-    out.elevatorPitch = `${out.headline}${out.yearsOfExperience ? ` with over ${out.yearsOfExperience} years of experience` : ''}${skillsSnippet ? ` specializing in ${skillsSnippet}` : ''}.`;
-  }
-
-  // Eligibility & default job preferences
-  if (!out.workAuthorization) out.workAuthorization = 'authorized';
-  if (out.willingToRelocate === undefined) out.willingToRelocate = true;
-  if (!out.noticePeriod) out.noticePeriod = '1 month';
-  if (!out.remotePreference) out.remotePreference = 'any';
-  if (!out.industry && out.targetRoles?.length) {
-    const r = out.targetRoles[0].toLowerCase();
-    if (/design|ui|ux|product/i.test(r)) out.industry = 'Product & Design';
-    else if (/engineer|developer|software|backend|frontend|devops|cloud|data/i.test(r)) out.industry = 'Software & Technology';
-    else if (/finance|account|fintech/i.test(r)) out.industry = 'Finance & FinTech';
-    else if (/marketing|growth|content/i.test(r)) out.industry = 'Marketing & Communications';
-    else out.industry = 'Technology';
-  }
-
   return out;
 }
 
@@ -337,111 +261,59 @@ export class ProfileController {
 
     let warnings: string[] = [];
     let parsedData: any = null;
+    let parsedSource: 'ai' | 'fallback' = 'ai';
 
     if (llmEnabled()) {
       try {
         const parsed = await parseCv(rawText);
-        parsedData = parsed.data;
+        parsedData = { ...parsed.data, languages: parsed.languages };
         warnings = parsed.warnings;
       } catch (err: any) {
+        parsedSource = 'fallback';
         parsedData = parseCvDeterministic(rawText);
-        warnings = ['LLM parser fallback engaged; extracted profile details from document text.'];
+        warnings = [`We couldn't run the smart parser (${String(err?.message || err).slice(0, 80)}), so some fields may need a check.`];
       }
     } else {
+      parsedSource = 'fallback';
       parsedData = parseCvDeterministic(rawText);
     }
 
     if (parsedData) parsedData = enrichParsed(parsedData);
 
+    const suggestions: Record<string, unknown> = {};
     if (profile && parsedData) {
-      // Merge scalar fields
+      const isEmpty = (v: any): boolean =>
+        v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0) ||
+        (typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date) && Object.values(v).every((x) => isEmpty(x)));
+      const ARRAYS = ['experience', 'education', 'projects', 'certifications', 'skills', 'primarySkills', 'toolsAndFrameworks', 'links'];
+      const SKIP = new Set(['id', 'userId', 'avatarUrl', ...ARRAYS]);
+
+      // Fill only what the person hasn't already entered.
       for (const [key, value] of Object.entries(parsedData)) {
-        if (value == null) continue;
-        if (Array.isArray(value)) continue; // Handled explicitly below
-        if (typeof value === 'string' && value.trim() === '') continue;
-        profile.set(key, value);
+        if (SKIP.has(key) || isEmpty(value)) continue;
+        if (isEmpty(profile.get(key))) profile.set(key, value);
       }
-
-      // Explicitly map structured subdocument arrays to preserve IDs, types, and bullet achievements
-      if (Array.isArray(parsedData.experience) && parsedData.experience.length > 0) {
-        profile.experience = parsedData.experience.map((e: any) => ({
-          ...withId(e),
-          company: e.company || 'Company',
-          title: e.title || 'Role',
-          location: e.location || '',
-          start: e.start || '',
-          end: e.end || '',
-          current: !!e.current,
-          bullets: (e.bullets || []).map((b: any) => withId(typeof b === 'string' ? { text: b } : b)),
-        }));
+      // Lists: replace only an empty list, otherwise hand the parse back as a suggestion.
+      for (const key of ARRAYS) {
+        const value = parsedData[key];
+        if (!Array.isArray(value) || !value.length) continue;
+        if (isEmpty(profile.get(key))) {
+          const mapped = value.map((item: any) => {
+            if (typeof item !== 'object' || item === null) return item;
+            const withIds = withId(item);
+            if (Array.isArray(item.bullets)) withIds.bullets = item.bullets.map((b: any) => withId(typeof b === 'string' ? { text: b } : b));
+            return withIds;
+          });
+          profile.set(key, key === 'links' || key === 'skills' ? value : mapped);
+        } else {
+          suggestions[key] = value;
+        }
       }
-
-      if (Array.isArray(parsedData.education) && parsedData.education.length > 0) {
-        profile.education = parsedData.education.map((ed: any) => ({
-          ...withId(ed),
-          institution: ed.institution || 'University',
-          degree: ed.degree || '',
-          field: ed.field || '',
-          start: ed.start || '',
-          end: ed.end || '',
-          grade: ed.grade || '',
-        }));
-      }
-
-      if (Array.isArray(parsedData.projects) && parsedData.projects.length > 0) {
-        profile.projects = parsedData.projects.map((p: any) => ({
-          ...withId(p),
-          name: p.name || 'Project',
-          url: p.url || '',
-          description: p.description || '',
-          skills: p.skills || [],
-          bullets: (p.bullets || []).map((b: any) => withId(typeof b === 'string' ? { text: b } : b)),
-        }));
-      }
-
-      if (Array.isArray(parsedData.certifications) && parsedData.certifications.length > 0) {
-        profile.certifications = parsedData.certifications.map(withId);
-      }
-
-      if (Array.isArray(parsedData.skills) && parsedData.skills.length > 0) {
-        profile.skills = parsedData.skills;
-        profile.primarySkills = parsedData.primarySkills?.length
-          ? parsedData.primarySkills
-          : parsedData.skills.map((s: any) => (typeof s === 'string' ? s : s.name)).slice(0, 15);
-      }
-      if (parsedData.secondarySkills?.length) profile.secondarySkills = parsedData.secondarySkills;
-      if (parsedData.toolsAndFrameworks?.length) profile.toolsAndFrameworks = parsedData.toolsAndFrameworks;
-
-      if (parsedData.targetRoles?.length) {
-        profile.targetRoles = parsedData.targetRoles;
-      }
-      if (parsedData.locations?.length) {
-        profile.locations = parsedData.locations;
-      }
-      if (parsedData.address && (!profile.address || !profile.address.city)) {
-        profile.address = parsedData.address;
-      }
-      if (parsedData.currentTitle) {
-        profile.currentTitle = parsedData.currentTitle;
-      }
-      if (parsedData.currentCompany) {
-        profile.currentCompany = parsedData.currentCompany;
-      }
-      if (parsedData.yearsOfExperience != null) {
-        profile.yearsOfExperience = parsedData.yearsOfExperience;
-        profile.inferredLevel = parsedData.inferredLevel;
-        profile.validatedLevel = parsedData.validatedLevel;
-      }
-      if (parsedData.highestEducationLevel) {
-        profile.highestEducationLevel = parsedData.highestEducationLevel;
-      }
-      if (parsedData.avatarUrl) {
-        profile.avatarUrl = parsedData.avatarUrl;
-      }
-      if (parsedData.elevatorPitch) {
-        profile.elevatorPitch = parsedData.elevatorPitch;
+      if (parsedData.languages?.length && isEmpty(profile.get('languages'))) {
+        profile.set('languages', parsedData.languages.map((language: string) => ({ language, proficiency: 'conversational' })));
       }
       profile.setupStep = 2;
+      profile.furthestStep = Math.max(profile.furthestStep || 1, 2);
       profile.cv = { originalName: file.originalname, path: dest, mime: file.mimetype, uploadedAt: new Date(), rawText, parseWarnings: warnings };
       profile.status = 'draft';
       await profile.save();
@@ -455,6 +327,8 @@ export class ProfileController {
       profile: profile ? publicProfile(profile) : parsedData,
       parsed: parsedData,
       warnings,
+      suggestions,
+      source: parsedSource,
       message: 'CV uploaded and profile fields populated. All fields remain fully editable.',
     });
   }
@@ -477,6 +351,7 @@ export class ProfileController {
     profile.set(rest);
     if (setupStep) {
       profile.setupStep = setupStep;
+      profile.furthestStep = Math.max(profile.furthestStep || 1, setupStep);
       await User.findByIdAndUpdate(userId, { setupStep }).catch(() => null);
     }
     if (body.avatarUrl) {
@@ -512,7 +387,10 @@ export class ProfileController {
     }
 
     profile.status = 'verified';
+    profile.isSetupCompleted = true;
+    profile.setupCompleted = true;
     await profile.save();
+    await User.updateOne({ _id: userId }, { onboardingStage: 'completed', isSetupCompleted: true, setupCompleted: true });
     const waiting = await Application.find({ userId, status: 'matched' }, { _id: 1 });
     for (const a of waiting) await enqueueGenerate(String(a._id));
     res.json({ status: 'verified', queuedDrafts: waiting.length });

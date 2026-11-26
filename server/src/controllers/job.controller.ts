@@ -292,3 +292,47 @@ export class JobController {
     });
   }
 }
+
+// ---- Saved jobs: kept on the profile so they work the same with any database ----
+import { loadProfile } from './profile.controller';
+
+const matchFor = async (userId: string, jobs: any[]) => {
+  const apps: any[] = (await Application.find({ userId, jobId: { $in: jobs.map((j) => j._id) } }, { jobId: 1, score: 1, status: 1 }).lean()) as any[];
+  const byJob = new Map(apps.filter((a) => String(a.userId ?? userId) === String(userId)).map((a) => [String(a.jobId?._id ?? a.jobId), a]));
+  return jobs.map((j) => {
+    const obj = typeof j.toObject === 'function' ? j.toObject() : { ...j };
+    const a = byJob.get(String(j._id));
+    return a ? { ...obj, match: { score: a.score, status: a.status } } : obj;
+  });
+};
+
+export class SavedJobController {
+  static async list(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const profile: any = await loadProfile(userId);
+    const ids: string[] = (profile.savedJobIds ?? []).map(String);
+    if (!ids.length) return res.json({ jobs: [], ids: [] });
+    const all: any[] = (await JobPost.find({ _id: { $in: ids } })) as any;
+    const jobs = all.filter((j) => ids.includes(String(j._id)));
+    res.json({ jobs: await matchFor(userId, jobs), ids });
+  }
+
+  static async save(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const id = String(req.params.id);
+    if (!(await JobPost.findOne({ _id: id }))) throw new AppError(404, 'Job not found');
+    const profile: any = await loadProfile(userId);
+    const ids: string[] = (profile.savedJobIds ?? []).map(String);
+    if (!ids.includes(id)) profile.savedJobIds = [id, ...ids].slice(0, 500);
+    await profile.save();
+    res.status(201).json({ saved: true, ids: profile.savedJobIds });
+  }
+
+  static async unsave(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const profile: any = await loadProfile(userId);
+    profile.savedJobIds = (profile.savedJobIds ?? []).map(String).filter((x: string) => x !== String(req.params.id));
+    await profile.save();
+    res.json({ saved: false, ids: profile.savedJobIds });
+  }
+}

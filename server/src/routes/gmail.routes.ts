@@ -5,6 +5,7 @@ import { GmailController } from '../controllers/gmail.controller';
 
 const router = Router();
 
+router.get('/status', requireAuth, asyncHandler(GmailController.status));
 router.get('/connect', requireAuth, asyncHandler(GmailController.connect));
 router.get('/callback', asyncHandler(GmailController.callback));
 router.delete('/', requireAuth, asyncHandler(GmailController.disconnect));

@@ -2,6 +2,8 @@ import { useState, useEffect, type FC } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { JaviBrandMark } from '@/assets/logos';
 import { useIsMobile } from '@/hooks/useStageScale';
+import { tokenStorage } from '@/api';
+import { ensureSession } from '@/lib/session';
 
 const NAV_LINKS = [
   { to: '/how', label: 'How it works' },
@@ -15,10 +17,12 @@ export const Navbar: FC = () => {
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken());
 
-  // Close mobile drawer on route change
+  // Close mobile drawer on route change & refresh session status
   useEffect(() => {
     setMobileMenuOpen(false);
+    void ensureSession().then((ok) => setIsSignedIn(ok));
   }, [pathname]);
 
   if (isMobile) {
@@ -55,20 +59,37 @@ export const Navbar: FC = () => {
         </Link>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link
-            to="/signin"
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: '#3a3a40',
-              background: '#f4f4f6',
-              border: '1px solid #ececef',
-              borderRadius: 8,
-              padding: '6px 12px',
-            }}
-          >
-            Sign in
-          </Link>
+          {isSignedIn ? (
+            <Link
+              to="/dash"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#fff',
+                background: '#2563EB',
+                borderRadius: 8,
+                padding: '6px 14px',
+                textDecoration: 'none',
+              }}
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <Link
+              to="/signin"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#3a3a40',
+                background: '#f4f4f6',
+                border: '1px solid #ececef',
+                borderRadius: 8,
+                padding: '6px 12px',
+              }}
+            >
+              Sign in
+            </Link>
+          )}
 
           {/* Hamburger Menu Toggle Button */}
           <button
@@ -168,43 +189,67 @@ export const Navbar: FC = () => {
 
             <div style={{ height: 1, background: '#f0f0f3', margin: '8px 0' }} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-              <Link
-                to="/signin"
-                onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  height: 40,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#3a3a40',
-                  background: '#f4f4f6',
-                  borderRadius: 10,
-                  border: '1px solid #ececef',
-                }}
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/waitlist"
-                onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  height: 40,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#fff',
-                  background: '#0b0b0c',
-                  borderRadius: 10,
-                  boxShadow: '0 4px 12px rgba(0,0,0,.15)',
-                }}
-              >
-                Get Started
-              </Link>
+            <div style={{ display: 'grid', gridTemplateColumns: isSignedIn ? '1fr' : '1fr 1fr', gap: 10, marginTop: 4 }}>
+              {isSignedIn ? (
+                <Link
+                  to="/dash"
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{
+                    height: 42,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#fff',
+                    background: '#2563EB',
+                    borderRadius: 10,
+                    textDecoration: 'none',
+                    boxShadow: '0 4px 12px rgba(37,99,235,.25)',
+                  }}
+                >
+                  Go to Dashboard →
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/signin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#3a3a40',
+                      background: '#f4f4f6',
+                      borderRadius: 10,
+                      border: '1px solid #ececef',
+                    }}
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    to="/signin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#fff',
+                      background: '#0b0b0c',
+                      borderRadius: 10,
+                      boxShadow: '0 4px 12px rgba(0,0,0,.15)',
+                    }}
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -318,36 +363,59 @@ export const Navbar: FC = () => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <Link
-          to="/signin"
-          className="jj-btn-secondary"
-          style={{
-            fontSize: 11.5,
-            fontWeight: 500,
-            color: '#3a3a40',
-            background: '#f4f4f6',
-            border: '1px solid #ececef',
-            borderRadius: 8,
-            padding: '7px 12px',
-          }}
-        >
-          Sign in
-        </Link>
-        <Link
-          to="/signin"
-          className="jj-btn-primary"
-          style={{
-            fontSize: 11.5,
-            fontWeight: 500,
-            color: '#fff',
-            background: '#0b0b0c',
-            borderRadius: 8,
-            padding: '8px 13px',
-            boxShadow: '0 4px 10px rgba(0,0,0,.15)',
-          }}
-        >
-          Get Started
-        </Link>
+        {isSignedIn ? (
+          <Link
+            to="/dash"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#fff',
+              background: '#2563EB',
+              borderRadius: 8,
+              padding: '7px 16px',
+              textDecoration: 'none',
+              boxShadow: '0 4px 12px rgba(37,99,235,.2)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            Dashboard →
+          </Link>
+        ) : (
+          <>
+            <Link
+              to="/signin"
+              className="jj-btn-secondary"
+              style={{
+                fontSize: 11.5,
+                fontWeight: 500,
+                color: '#3a3a40',
+                background: '#f4f4f6',
+                border: '1px solid #ececef',
+                borderRadius: 8,
+                padding: '7px 12px',
+              }}
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/signin"
+              className="jj-btn-primary"
+              style={{
+                fontSize: 11.5,
+                fontWeight: 500,
+                color: '#fff',
+                background: '#0b0b0c',
+                borderRadius: 8,
+                padding: '8px 13px',
+                boxShadow: '0 4px 10px rgba(0,0,0,.15)',
+              }}
+            >
+              Get Started
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );

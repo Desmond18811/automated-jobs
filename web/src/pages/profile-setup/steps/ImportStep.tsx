@@ -13,28 +13,31 @@ export const ImportStep: FC<{ draft: UserProfile; onImported: (serverProfile: un
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ name: string; warnings: string[]; filled: string[] } | null>(null);
+  const [result, setResult] = useState<{ name: string; warnings: string[]; rows: [string, string][]; fallback: boolean; kept: string[] } | null>(null);
 
   const upload = async (file: File) => {
     setBusy(true);
     setError('');
     try {
       const res = await profileApi.uploadCv(file);
-      const p = res?.profile ?? {};
-      const filled = [
-        p.fullName && 'name',
-        p.email && 'email',
-        p.phone && 'phone',
-        p.headline && 'headline',
-        p.summary && 'summary',
-        p.experience?.length && `${p.experience.length} jobs`,
-        p.education?.length && `${p.education.length} schools`,
-        p.projects?.length && `${p.projects.length} projects`,
-        p.certifications?.length && `${p.certifications.length} certifications`,
-        p.skills?.length && `${p.skills.length} skills`,
-      ].filter(Boolean) as string[];
+      const p = res?.parsed ?? res?.profile ?? {};
+      const count = (n: number | undefined, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : '');
+      const rows = (
+        [
+          ['Name', p.fullName],
+          ['Headline', p.headline],
+          ['Current role', p.currentTitle && p.currentCompany ? `${p.currentTitle} at ${p.currentCompany}` : p.currentTitle],
+          ['Location', p.location],
+          ['Contact', [p.email, p.phone].filter(Boolean).join(' · ')],
+          ['Links', count(p.links?.length, 'link', 'links')],
+          ['Experience', count(p.experience?.length, 'job', 'jobs')],
+          ['Education', count(p.education?.length, 'entry', 'entries')],
+          ['Skills', count(p.skills?.length, 'skill', 'skills')],
+        ] as [string, string][]
+      ).filter(([, v]) => v);
+      const kept = Object.keys(res?.suggestions ?? {});
       onImported(res?.profile);
-      setResult({ name: file.name, warnings: res?.warnings ?? [], filled });
+      setResult({ name: file.name, warnings: res?.warnings ?? [], rows, fallback: res?.source === 'fallback', kept });
     } catch (err) {
       setError(describeSaveError(err).join(' '));
     } finally {
@@ -110,10 +113,17 @@ export const ImportStep: FC<{ draft: UserProfile; onImported: (serverProfile: un
         {result && (
           <Notice tone="ok">
             Read <strong>{result.name}</strong>
-            {result.filled.length ? `: found ${result.filled.join(', ')}.` : ', but couldn’t pick out structured details. You can fill them in next.'} Check every
-            step; nothing is final until you verify at the end.
+            {result.rows.length ? ':' : ', but couldn’t pick out structured details. You can fill them in next.'}
+            {result.rows.map(([label, value]) => (
+              <div key={label}>
+                <strong>{label}:</strong> {value}
+              </div>
+            ))}
+            Check every step; nothing is final until you verify at the end.
           </Notice>
         )}
+        {result?.fallback && <Notice>We used our basic reader for this file, so double-check names, titles and dates.</Notice>}
+        {result?.kept.length ? <Notice>Your existing {result.kept.join(', ')} were kept; the CV’s versions were not applied over them.</Notice> : null}
         {result?.warnings.length ? (
           <Notice>
             {result.warnings.slice(0, 5).map((w) => (

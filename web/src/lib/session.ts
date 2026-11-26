@@ -61,28 +61,55 @@ export function startSessionKeepAlive(): () => void {
   };
 }
 
-export type SessionState = 'checking' | 'signed-in' | 'signed-out';
+export type GuardState = 'checking' | 'signed-out' | 'needs-setup' | 'ready' | 'error';
 
-/** Route guard hook: resolves the session once on mount. */
-export function useRequireSession(): SessionState {
-  const [state, setState] = useState<SessionState>(() => (tokenStorage.get() ? 'signed-in' : 'checking'));
+/**
+ * Route guard. Protected UI is never shown on the strength of a stored token: the session is renewed from the
+ * cookie and the server's own answer (/auth/me) decides whether the person is signed in and finished onboarding.
+ *  - 'dash' pages need a finished profile (otherwise 'needs-setup')
+ *  - 'setup' needs only a session
+ */
+export function useGuard(kind: 'dash' | 'setup'): { state: GuardState; retry: () => void; complete: boolean } {
+  const [state, setState] = useState<GuardState>('checking');
+  const [complete, setComplete] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
-    void ensureSession().then((ok) => {
-      if (live) setState(ok ? 'signed-in' : 'signed-out');
-    });
+    setState('checking');
+    (async () => {
+      try {
+        if (!(await ensureSession())) return live && setState('signed-out');
+        let me: any;
+        try {
+          me = await authApi.getMe();
+        } catch (err: any) {
+          if (err?.status !== 401) throw err;
+          // The server no longer honours this access token (restart, rotated session). Renew it from the cookie
+          // once and ask again; only a second refusal means the person is really signed out.
+          if (!(await refreshSession())) return live && setState('signed-out');
+          me = await authApi.getMe();
+        }
+        if (!live) return;
+        const done = me.onboardingStage === 'completed' || !!me.isSetupCompleted;
+        setComplete(done);
+        setState(kind === 'dash' && !done ? 'needs-setup' : 'ready');
+      } catch (err: any) {
+        if (!live) return;
+        setState(err?.status === 401 || err?.status === 403 ? 'signed-out' : 'error');
+      }
+    })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [kind, attempt]);
 
-  return state;
+  return { state, complete, retry: () => setAttempt((n) => n + 1) };
 }
 
 /** Where to send someone after sign-in: the page they were trying to reach, if it is inside the app. */
 export function safeNext(next: string | null | undefined): string | null {
-  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/signin') && !next.startsWith('/auth')
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') && !/[\u0000-\u001f]/.test(next) && !next.startsWith('/signin') && !next.startsWith('/auth')
     ? next
     : null;
 }

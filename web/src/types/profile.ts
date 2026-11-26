@@ -135,6 +135,10 @@ export interface UserProfile {
   /** Only POST /profile/verify sets 'verified'. */
   status: 'draft' | 'verified';
   setupStep?: number;
+  /** Highest step reached; Back never lowers it. */
+  furthestStep?: number;
+  isSetupCompleted?: boolean;
+  setupCompleted?: boolean;
 
   // Personal & Contact
   firstName: string;
@@ -206,6 +210,8 @@ export interface UserProfile {
 export const EMPTY_PROFILE: UserProfile = {
   status: 'draft',
   setupStep: 1,
+  isSetupCompleted: false,
+  setupCompleted: false,
   firstName: '',
   lastName: '',
   fullName: '',

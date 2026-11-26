@@ -17,10 +17,13 @@ export class ApiError extends Error {
 }
 
 const TOKEN_KEY = 'javi_access_token';
+const REFRESH_TOKEN_KEY = 'javi_refresh_token';
 
 /** Number of steps in the profile setup wizard (pages/profile-setup). */
 export const SETUP_STEP_COUNT = 9;
 
+let memoryToken: string | null = null;
+let memoryStage = 'otp_pending';
 const tokenListeners = new Set<(token: string | null) => void>();
 
 export const tokenStorage = {
@@ -29,26 +32,29 @@ export const tokenStorage = {
     tokenListeners.add(fn);
     return () => tokenListeners.delete(fn);
   },
-  get: (): string | null => {
+  get: (): string | null => memoryToken,
+  set: (accessToken: string): void => {
+    memoryToken = accessToken;
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      // Nothing credential-like is persisted: the refresh token is an httpOnly cookie and the access token lives
+      // in memory only. Drop copies left behind by older builds.
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
     } catch {
-      return null;
+      /* storage unavailable */
     }
-  },
-  set: (token: string): void => {
-    try {
-      localStorage.setItem(TOKEN_KEY, token);
-    } catch (e) {
-      console.warn('Failed to store access token', e);
-    }
-    tokenListeners.forEach((fn) => fn(token));
+    tokenListeners.forEach((fn) => fn(accessToken));
   },
   clear: (): void => {
+    memoryToken = null;
+    memoryStage = 'otp_pending';
     try {
-      localStorage.removeItem(TOKEN_KEY);
-    } catch (e) {
-      console.warn('Failed to clear access token', e);
+      // Sign-out leaves nothing of the previous person on this browser.
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('javi_'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* storage unavailable */
     }
     tokenListeners.forEach((fn) => fn(null));
   },
@@ -87,17 +93,10 @@ export const authStateStorage = {
       if (email) localStorage.setItem('javi_last_email', email);
     } catch {}
   },
-  getStage: (): string => {
-    try {
-      return localStorage.getItem('javi_onboarding_stage') || 'otp_pending';
-    } catch {
-      return 'otp_pending';
-    }
-  },
+  /** Held in memory for this tab only; the server is the authority on onboarding. */
+  getStage: (): string => memoryStage,
   setStage: (stage: 'otp_pending' | 'profile_setup' | 'completed'): void => {
-    try {
-      localStorage.setItem('javi_onboarding_stage', stage);
-    } catch {}
+    memoryStage = stage;
   },
   getSetupStep: (): number => {
     try {
@@ -159,10 +158,16 @@ export interface SessionUser {
   setupStep?: number;
   isEmailVerified?: boolean;
   profileImage?: string;
+  isSetupCompleted?: boolean;
+  setupCompleted?: boolean;
+  hasProfile?: boolean;
+  profileStatus?: string;
 }
 
 export interface AuthResponse {
   accessToken: string;
+  refreshToken?: string;
+  refreshExpiresAt?: string;
   expiresIn?: number;
   stage?: string;
   user?: SessionUser;
@@ -190,6 +195,7 @@ export function refreshSession(): Promise<AuthResponse | null> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: '{}',
       });
       if (res.status === 401) {
         tokenStorage.clear();
@@ -306,6 +312,9 @@ export async function api<T = any>(endpoint: string, options: RequestOptions = {
     const message =
       (responseData && typeof responseData === 'object' && (responseData.error || responseData.message)) ||
       (typeof responseData === 'string' && responseData) ||
+      (res.status === 404 && !contentType
+        ? `The API server didn't answer ${path}. Another dev server may be using this port; stop it or open the app at http://127.0.0.1:5173.`
+        : '') ||
       `Request failed with status ${res.status}`;
     throw new ApiError(res.status, message, responseData);
   }
@@ -449,9 +458,9 @@ export const profileApi = {
 // -----------------------------------------------------------------------------
 export interface ManualJobPayload {
   url: string;
-  title: string;
-  company: string;
-  description: string;
+  title?: string;
+  company?: string;
+  description?: string;
   location?: string;
   remote?: boolean;
 }
@@ -461,6 +470,11 @@ export const jobsApi = {
   list: async (params?: { q?: string; limit?: number; skip?: number }): Promise<{ jobs: any[]; total: number; count: number }> => {
     return api('/jobs', { params: params as any });
   },
+
+  /** Saved jobs: the list (with match scores) and the ids, for star toggles. */
+  saved: async (): Promise<{ jobs: any[]; ids: string[] }> => api('/jobs/saved'),
+  save: async (id: string): Promise<{ saved: boolean; ids: string[] }> => api(`/jobs/${id}/save`, { method: 'POST' }),
+  unsave: async (id: string): Promise<{ saved: boolean; ids: string[] }> => api(`/jobs/${id}/save`, { method: 'DELETE' }),
 
   /** Add a manual job via URL paste */
   addManual: async (payload: ManualJobPayload): Promise<any> => {
@@ -519,6 +533,13 @@ export const applicationsApi = {
   list: async (params?: ApplicationListParams): Promise<any> => {
     return api('/applications', { params: params as any });
   },
+
+  /** Interviews you have, and applications that became offers or jobs. */
+  interviews: async (): Promise<any> => api('/applications/interviews'),
+
+  /** Every status change between two dates (drives the calendar). */
+  activity: async (from: Date, to: Date): Promise<{ events: any[] }> =>
+    api('/applications/activity', { params: { from: from.toISOString(), to: to.toISOString() } as any }),
 
   /** Get application details */
   get: async (id: string): Promise<any> => {
@@ -667,6 +688,11 @@ export const meApi = {
 // 8. Gmail Integration API
 // -----------------------------------------------------------------------------
 export const gmailApi = {
+  /** Get connection status of Gmail */
+  status: async (): Promise<{ configured?: boolean; connected: boolean; address: string | null; connectedAt?: string }> => {
+    return api('/gmail/status');
+  },
+
   /** Get OAuth URL to connect Gmail */
   connect: async (): Promise<{ url: string }> => {
     return api('/gmail/connect');
@@ -780,6 +806,9 @@ export const businessApi = {
 // 9. Analytics API
 // -----------------------------------------------------------------------------
 export const analyticsApi = {
+  /** Platforms and link types you applied through, activity per day, average match. */
+  overview: async (): Promise<any> => api('/analytics/overview'),
+
   /** Get live conversion rates and funnel stages */
   getFunnel: async (): Promise<any> => {
     return api('/analytics/funnel', {
@@ -792,6 +821,7 @@ export const analyticsApi = {
 // 10. Diagnostic & Automated Tests API (Form Auto-Fill & WhatsApp Alerts)
 // -----------------------------------------------------------------------------
 export const testApi = {
+  status: (): Promise<{ enabled: boolean; provider: string; whatsappConfigured: boolean; defaultRecipientSet: boolean }> => api('/test-status'),
   /** Tests candidate form mapping (LinkedIn, ATS fields, contacts, PDF resume) */
   testFormFill: async (): Promise<any> => {
     return api('/test/form-fill', { method: 'POST' });

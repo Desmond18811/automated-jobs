@@ -93,4 +93,36 @@ export class ApplicationController {
     await transition(app, status, note ?? 'updated by you');
     res.json(app);
   }
+
+  /** GET /applications/interviews: interviews you have and applications that turned into offers or jobs. */
+  static async interviews(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const apps: any[] = (await Application.find({ userId }).populate('jobId', 'title company location url source applyMethod').lean()) as any[];
+    const mine = apps.filter((a) => String(a.userId) === String(userId));
+    const reached = (a: any, state: string) => [...(a.history ?? [])].reverse().find((h: any) => h.to === state)?.at ?? a.updatedAt;
+    const row = (a: any, state: string) => ({ _id: a._id, status: a.status, score: a.score, job: a.jobId, since: reached(a, state), note: (a.history ?? []).slice(-1)[0]?.note });
+    const interviews = mine.filter((a) => a.status === 'interview').map((a) => row(a, 'interview'));
+    const successful = mine.filter((a) => a.status === 'offer' || a.status === 'hired').map((a) => row(a, a.status));
+    const everInterviewed = mine.filter((a) => ['interview', 'offer', 'hired'].includes(a.status) || (a.history ?? []).some((h: any) => h.to === 'interview')).length;
+    const sent = mine.filter((a) => ['sent', 'replied', 'interview', 'offer', 'hired', 'rejected', 'no_response'].includes(a.status)).length;
+    res.json({ interviews, successful, counts: { interviews: interviews.length, successful: successful.length, everInterviewed, sent } });
+  }
+
+  /** GET /applications/activity?from=ISO&to=ISO: every status change in the window, for the calendar. */
+  static async activity(req: Request, res: Response) {
+    const userId = currentUser(req);
+    const q = parseBody(z.object({ from: z.coerce.date(), to: z.coerce.date() }), req.query);
+    if (q.to.getTime() - q.from.getTime() > 62 * 864e5) throw new AppError(400, 'Choose a window of up to two months');
+    const apps: any[] = (await Application.find({ userId }).populate('jobId', 'title company url applyMethod').lean()) as any[];
+    const events: any[] = [];
+    for (const a of apps) {
+      if (String(a.userId) !== String(userId)) continue;
+      for (const h of a.history ?? []) {
+        const at = new Date(h.at);
+        if (at >= q.from && at <= q.to) events.push({ applicationId: a._id, to: h.to, from: h.from, at, note: h.note, job: a.jobId && typeof a.jobId === 'object' ? { title: a.jobId.title, company: a.jobId.company, url: a.jobId.url } : null });
+      }
+    }
+    events.sort((x, y) => +new Date(y.at) - +new Date(x.at));
+    res.json({ events });
+  }
 }

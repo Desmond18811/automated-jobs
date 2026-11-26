@@ -20,8 +20,10 @@ export const GMAIL_SCOPES = [
   ...(env.GMAIL_READ_CODES ? [READONLY_SCOPE] : []),
 ];
 
+export const gmailConfigured = (): boolean => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
 export function oauthClient() {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new AppError(503, 'Gmail is not configured on this server');
+  if (!gmailConfigured()) throw new AppError(409, 'Gmail is not configured on this server', 'gmail_not_configured');
   return new google.auth.OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_REDIRECT_URI);
 }
 

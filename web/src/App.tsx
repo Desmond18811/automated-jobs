@@ -15,12 +15,13 @@ import { FaqPage } from '@/pages/FaqPage';
 import { SignInPage } from '@/pages/SignInPage';
 import { VerifyLinkPage } from '@/pages/VerifyLinkPage';
 import { RequireSession } from '@/components/auth/RequireSession';
-import { onSessionExpired } from '@/api';
-import { startSessionKeepAlive } from '@/lib/session';
+import { authApi, onSessionExpired } from '@/api';
+import { ensureSession, safeNext, startSessionKeepAlive } from '@/lib/session';
 import { WaitlistPage } from '@/pages/WaitlistPage';
 import { ProfileSetupPage } from '@/pages/profile-setup/ProfileSetupPage';
 import { ReplyPage } from '@/pages/ReplyPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { NotFound } from '@/components/talentspro/Pages';
 
 const AppContent: FC = () => {
   const scale = useStageScale();
@@ -40,6 +41,31 @@ const AppContent: FC = () => {
       onSessionExpired(null);
     };
   }, [navigate]);
+
+  // If the user already has a valid session and completed profile, go straight to the dashboard
+  useEffect(() => {
+    if (pathname === '/' || pathname === '/signin' || pathname === '/signup') {
+      let live = true;
+      void ensureSession().then(async (ok) => {
+        if (!live) return;
+        if (!ok) return;
+        try {
+          const me = await authApi.getMe();
+          if (!live) return;
+          if (me.onboardingStage === 'completed' || (me as any).isSetupCompleted) {
+            navigate(safeNext(new URLSearchParams(window.location.search).get('next')) ?? '/dash', { replace: true });
+          } else if (pathname === '/signin' || pathname === '/signup') {
+            navigate('/setup', { replace: true });
+          }
+        } catch {
+          /* the server's answer is the only authority: without it, stay where we are */
+        }
+      });
+      return () => {
+        live = false;
+      };
+    }
+  }, [pathname, navigate]);
 
   const isDashboard = pathname === '/dash' || pathname.startsWith('/dash/') || pathname === '/dashboard';
   const isAuthOrSetup =
@@ -77,8 +103,9 @@ const AppContent: FC = () => {
             <Route path="/auth/verify" element={<VerifyLinkPage />} />
             <Route path="/dash/*" element={<RequireSession><DashboardPage /></RequireSession>} />
             <Route path="/dashboard" element={<Navigate to="/dash" replace />} />
-            <Route path="/setup" element={<RequireSession><ProfileSetupPage /></RequireSession>} />
+            <Route path="/setup" element={<RequireSession kind="setup"><ProfileSetupPage /></RequireSession>} />
             <Route path="/r/:token" element={<ReplyPage />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
       ) : isMobile ? (
@@ -112,6 +139,7 @@ const AppContent: FC = () => {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/waitlist" element={<WaitlistPage />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>
@@ -138,6 +166,7 @@ const AppContent: FC = () => {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/waitlist" element={<WaitlistPage />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>

@@ -79,6 +79,7 @@ export interface Rules {
   autoApproveMinScore: number;
   sendingHours: { start: number; end: number; timezone: string };
   weekdaysOnly: boolean;
+  plan?: 'pro' | 'pro_max' | 'enterprise';
 }
 
 export type Period = 'hour' | 'month' | 'year';
@@ -110,6 +111,11 @@ export interface IProfile {
   /** draft until the user reviews the profile/parsed CV. Nothing is generated from a draft profile. */
   status: 'draft' | 'verified';
   setupStep?: number;
+  /** Highest step ever reached: going Back never lowers it. */
+  furthestStep?: number;
+  /** Whether the user has completed profile setup. */
+  isSetupCompleted?: boolean;
+  setupCompleted?: boolean;
 
   // Personal & Contact
   firstName?: string;
@@ -172,6 +178,7 @@ export interface IProfile {
 
   // Automation & Rules
   blockedCompanies: string[];
+  savedJobIds: string[];
   rules: Rules;
   answerBank: SavedAnswer[];
   careerPages: CareerPage[];
@@ -245,6 +252,9 @@ const profileSchema = new Schema<IProfile>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     status: { type: String, enum: ['draft', 'verified'], default: 'draft' },
     setupStep: { type: Number, default: 1, min: 1, max: 9 },
+    furthestStep: { type: Number, default: 1, min: 1, max: 9 },
+    isSetupCompleted: { type: Boolean, default: false, index: true },
+    setupCompleted: { type: Boolean, default: false, index: true },
 
     // Personal & Contact
     firstName: { type: String, default: '' },
@@ -316,6 +326,7 @@ const profileSchema = new Schema<IProfile>(
 
     // Automation Rules
     blockedCompanies: [String],
+    savedJobIds: { type: [String], default: [] },
     rules: {
       dailySendCap: { type: Number, default: 15, min: 1, max: 50 },
       approvalMode: { type: String, enum: ['review', 'auto'], default: 'review' },
@@ -326,6 +337,7 @@ const profileSchema = new Schema<IProfile>(
         timezone: { type: String, default: 'UTC' },
       },
       weekdaysOnly: { type: Boolean, default: true },
+      plan: { type: String, enum: ['pro', 'pro_max', 'enterprise'], default: 'pro' },
     },
     answerBank: [answerSchema],
     careerPages: [careerPageSchema],
@@ -334,13 +346,21 @@ const profileSchema = new Schema<IProfile>(
   { timestamps: true },
 );
 
-// Auto-populate fullName from firstName and lastName if fullName is not explicitly set
+// Auto-populate fullName and sync setup completion flags
 profileSchema.pre('save', function (next) {
   if (this.firstName && this.lastName && (!this.fullName || this.fullName.trim() === '')) {
     this.fullName = `${this.firstName.trim()} ${this.lastName.trim()}`;
   }
   if (!this.location && this.address?.city && this.address?.country) {
     this.location = `${this.address.city}, ${this.address.country}`;
+  }
+  if (this.status === 'verified') {
+    this.isSetupCompleted = true;
+    this.setupCompleted = true;
+  } else if (this.isSetupCompleted || this.setupCompleted) {
+    this.isSetupCompleted = true;
+    this.setupCompleted = true;
+    this.status = 'verified';
   }
   next();
 });

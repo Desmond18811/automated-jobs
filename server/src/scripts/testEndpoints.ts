@@ -206,6 +206,10 @@ function setupInMemoryFallback() {
     memoryTokens.push(t);
     return Promise.resolve(t);
   };
+  (RefreshToken as any).find = (query: any) => {
+    const list = memoryTokens.filter((t) => (!query?.family || t.family === query.family) && (!query?.tokenHash || t.tokenHash === query.tokenHash));
+    return Promise.resolve(list);
+  };
   (RefreshToken as any).findOne = (query: any) => {
     const found = memoryTokens.find((t) => t.tokenHash === query.tokenHash);
     return Promise.resolve(found || null);

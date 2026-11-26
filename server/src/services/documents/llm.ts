@@ -73,28 +73,28 @@ export async function complete(opts: {
   throw new AppError(503, 'Text generation is not configured (set OPENROUTER_API_KEY or ANTHROPIC_API_KEY)');
 }
 
-/** Asks for JSON, strips any fences, and validates with zod so bad output fails loudly. */
+/** Asks for JSON, strips any fences, and validates with zod. One retry feeds the error back to the model. */
 export async function completeJson<S extends z.ZodTypeAny>(
   schema: S,
-  opts: { system: string; prompt: string; maxTokens?: number; temperature?: number },
+  opts: { system: string; prompt: string; maxTokens?: number; temperature?: number; retries?: number },
 ): Promise<z.infer<S>> {
-  const text = await complete({
-    ...opts,
-    system: `${opts.system}\n\nIMPORTANT: Return ONLY valid, raw JSON (no conversational preamble, no markdown formatting fences, no explanations).`,
-  });
-  const clean = text.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
-  const start = clean.indexOf('{');
-  const end = clean.lastIndexOf('}');
-  if (start === -1 || end === -1) {
-    throw new Error(`Model did not return JSON object. Raw response: ${text.slice(0, 100)}...`);
+  const system = `${opts.system}\n\nIMPORTANT: Return ONLY valid, raw JSON (no conversational preamble, no markdown formatting fences, no explanations).`;
+  let prompt = opts.prompt;
+  let lastErr = '';
+  for (let attempt = 0; attempt <= (opts.retries ?? 0); attempt++) {
+    const text = await complete({ system, prompt, maxTokens: opts.maxTokens, temperature: opts.temperature });
+    const clean = text.replace(/```(?:json)?/g, '').trim();
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    try {
+      if (start === -1 || end === -1) throw new Error(`no JSON object in response: ${text.slice(0, 100)}`);
+      return schema.parse(JSON.parse(clean.slice(start, end + 1)));
+    } catch (err: any) {
+      lastErr = err?.message ?? String(err);
+      prompt = `${opts.prompt}\n\nYour previous answer was rejected: ${lastErr.slice(0, 400)}\nReturn corrected JSON only.`;
+    }
   }
-  const jsonSlice = clean.slice(start, end + 1);
-  try {
-    const parsed = JSON.parse(jsonSlice);
-    return schema.parse(parsed);
-  } catch (err: any) {
-    throw new Error(`JSON Schema Parse Failed: ${err?.message}`);
-  }
+  throw new Error(`JSON Schema Parse Failed: ${lastErr}`);
 }
 
 /** zod helper: models often send null for "not present". */

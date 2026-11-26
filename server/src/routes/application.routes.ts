@@ -5,6 +5,8 @@ import { ApplicationController } from '../controllers/application.controller';
 const router = Router();
 
 router.get('/', asyncHandler(ApplicationController.list));
+router.get('/interviews', asyncHandler(ApplicationController.interviews));
+router.get('/activity', asyncHandler(ApplicationController.activity));
 router.get('/:id', asyncHandler(ApplicationController.getOne));
 router.patch('/:id/documents', asyncHandler(ApplicationController.updateDocuments));
 router.post('/:id/approve', asyncHandler(ApplicationController.approve));

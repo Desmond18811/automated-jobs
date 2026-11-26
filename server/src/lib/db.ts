@@ -16,6 +16,7 @@ export async function connectDb(): Promise<void> {
     });
     logger.info('MongoDB Atlas connected successfully');
   } catch (err: any) {
+    if (env.NODE_ENV === 'production') throw err;
     logger.warn(
       'MongoDB Atlas connection failed or IP not whitelisted. Activating in-memory store for offline & dev reliability.',
     );

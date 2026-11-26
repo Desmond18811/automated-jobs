@@ -26,7 +26,7 @@ export const SignIn: FC = () => {
     }
   }, [next]);
 
-  // Someone with a live session never needs to see this page.
+  // Someone with a live session or completed setup never needs to see this page.
   useEffect(() => {
     let live = true;
     (async () => {
@@ -35,7 +35,16 @@ export const SignIn: FC = () => {
           const me = await authApi.getMe();
           if (!live) return;
           authStateStorage.saveSession(me);
-          nav(me.onboardingStage === 'completed' ? next || '/dash' : getRouteForStage(me.onboardingStage), { replace: true });
+          if (
+            me.onboardingStage === 'completed' ||
+            (me as any).isSetupCompleted ||
+            (me as any).setupCompleted ||
+            (me as any).profileStatus === 'verified'
+          ) {
+            nav(next || '/dash', { replace: true });
+            return;
+          }
+          nav(getRouteForStage(me.onboardingStage), { replace: true });
           return;
         } catch {
           /* fall through to the form */

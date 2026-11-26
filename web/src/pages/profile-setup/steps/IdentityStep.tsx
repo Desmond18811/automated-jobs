@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FC } from 'react';
-import { taxonomyApi } from '@/api';
+import { gmailApi, taxonomyApi, testApi } from '@/api';
 import { CameraIcon, UserIcon } from '@/assets/icons';
 import { C, Field, Row, Section, StepHeader, TextInput, secondaryButton } from '../ui';
 import type { StepProps } from './types';
@@ -32,12 +32,45 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
   const address = draft.address ?? { city: '', country: '' };
   const setAddress = (partial: Partial<typeof address>) => patch({ address: { ...address, ...partial } });
 
+  const [testingWhatsApp, setTestingWhatsApp] = useState(false);
+  const [whatsAppMsg, setWhatsAppMsg] = useState<{ tone: 'ok' | 'danger'; text: string } | null>(null);
+  const [gmailStatus, setGmailStatus] = useState<{ connected: boolean; address: string | null; configured?: boolean } | null>(null);
+  const [gmailMsg, setGmailMsg] = useState('');
+
   useEffect(() => {
     taxonomyApi
       .getLocations()
       .then((r) => setCountries([...new Set(r.locations.map((l: any) => l.country).filter((c: string) => c && c !== 'Remote'))] as string[]))
       .catch(() => undefined);
+    gmailApi
+      .status()
+      .then(setGmailStatus)
+      .catch(() => setGmailStatus({ connected: false, address: null })); // unknown, not "not configured"
   }, []);
+
+  const sendTestWhatsApp = async () => {
+    const raw = draft.phone?.trim();
+    if (!raw || raw.replace(/\D/g, '').length < 7) {
+      setWhatsAppMsg({ tone: 'danger', text: 'Please enter a valid phone number with country code (e.g. +234...)' });
+      return;
+    }
+    setTestingWhatsApp(true);
+    setWhatsAppMsg(null);
+    try {
+      const res = await testApi.testWhatsApp({
+        phone: raw,
+        message: 'Hello from J.A.V.I! Your phone number is verified and connected for live application alerts.',
+      });
+      setWhatsAppMsg({
+        tone: 'ok',
+        text: `✓ Alert sent to ${res.recipient || raw}! Check your WhatsApp for J.A.V.I's confirmation.`,
+      });
+    } catch (err: any) {
+      setWhatsAppMsg({ tone: 'danger', text: err?.message || 'Could not send WhatsApp alert. Check number format.' });
+    } finally {
+      setTestingWhatsApp(false);
+    }
+  };
 
   return (
     <div>
@@ -105,6 +138,138 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
         <Field label="Professional headline" required hint="One line, e.g. “Senior Product Designer · Fintech”.">
           <TextInput value={draft.headline} onChange={(v) => patch({ headline: v })} />
         </Field>
+      </Section>
+
+      <Section title="Channel connectivity (Email & Phone)" hint="Verify that JAVI can reach you on WhatsApp and submit applications using your email.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+          {/* Email Channel */}
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: 12,
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Email Channel</span>
+              {gmailStatus?.connected ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#047857', background: '#ECFDF5', padding: '2px 8px', borderRadius: 999 }}>
+                  ● Gmail Connected
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#1D4ED8', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999 }}>
+                  ● Application Email
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: 13, color: '#334155', wordBreak: 'break-all', fontWeight: 500 }}>
+              {draft.email || 'No email entered'}
+            </span>
+            <span style={{ fontSize: 12, color: '#64748B', lineHeight: '17px' }}>
+              Recruiter confirmations and interview requests will arrive directly at this inbox.
+            </span>
+            {!gmailStatus?.connected ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { url } = await gmailApi.connect();
+                    window.location.assign(url);
+                  } catch (err: any) {
+                    setGmailMsg(
+                      err?.data?.code === 'gmail_not_configured'
+                        ? "Gmail sending isn't available yet. You can connect it later in Settings."
+                        : err?.message || 'Could not connect Gmail',
+                    );
+                  }
+                }}
+                disabled={gmailStatus?.configured === false}
+                style={{
+                  ...secondaryButton,
+                  height: 34,
+                  fontSize: 12,
+                  marginTop: 4,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                Connect Gmail Account
+              </button>
+            ) : null}
+            {!gmailStatus?.connected && (gmailStatus?.configured === false || gmailMsg) ? (
+              <span style={{ fontSize: 12, color: '#64748B' }}>
+                {gmailMsg || "Gmail sending isn't available yet. You can connect it later in Settings."}
+              </span>
+            ) : null}
+            {gmailStatus?.connected && (
+              <span style={{ fontSize: 12, color: '#047857', fontWeight: 500 }}>
+                Sending enabled as {gmailStatus.address}
+              </span>
+            )}
+          </div>
+
+          {/* Phone Channel */}
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: 12,
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Phone & WhatsApp</span>
+              {draft.phone?.replace(/\D/g, '').length >= 7 ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#047857', background: '#ECFDF5', padding: '2px 8px', borderRadius: 999 }}>
+                  ● Ready for alerts
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FEF3C7', padding: '2px 8px', borderRadius: 999 }}>
+                  Phone required
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: 13, color: '#334155', fontWeight: 500 }}>
+              {draft.phone || 'Enter your phone number above'}
+            </span>
+            <span style={{ fontSize: 12, color: '#64748B', lineHeight: '17px' }}>
+              Instant WhatsApp alerts for interactive verification (e.g. CAPTCHAs, recruiter replies).
+            </span>
+            <button
+              type="button"
+              disabled={testingWhatsApp || !draft.phone?.trim()}
+              onClick={sendTestWhatsApp}
+              style={{
+                ...secondaryButton,
+                height: 34,
+                fontSize: 12,
+                marginTop: 4,
+                alignSelf: 'flex-start',
+                background: testingWhatsApp ? '#E2E8F0' : '#FFFFFF',
+              }}
+            >
+              {testingWhatsApp ? 'Dispatching test…' : 'Test WhatsApp Connection'}
+            </button>
+            {whatsAppMsg && (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: whatsAppMsg.tone === 'ok' ? '#047857' : '#B42318',
+                  marginTop: 2,
+                }}
+              >
+                {whatsAppMsg.text}
+              </span>
+            )}
+          </div>
+        </div>
       </Section>
 
       <Section title="Address" hint="Forms ask for city and country almost every time; street and postcode only sometimes.">

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { asyncHandler } from '../lib/http';
-import { requireAuth, optionalAuth } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 import { ProfileController } from '../controllers/profile.controller';
 import { CV_MIME } from '../services/documents/cvParser';
 
@@ -13,7 +13,7 @@ const upload = multer({
 });
 
 // CV parsing allows optional auth (candidates can parse during onboarding even before session finalization)
-router.post('/cv', optionalAuth, upload.single('cv'), asyncHandler(ProfileController.uploadCv));
+router.post('/cv', requireAuth, upload.single('cv'), asyncHandler(ProfileController.uploadCv));
 
 // Authenticated profile endpoints
 router.get('/', requireAuth, asyncHandler(ProfileController.getProfile));
