@@ -14,7 +14,7 @@ import { enqueueGenerate, queues, defaultJobOpts } from '../queues';
 import { MIN_REVIEWED_FOR_AUTO, userApprovalCount } from '../services/safety.service';
 import { detectAts, greenhouse, lever, ashby, workable, smartrecruiters } from '../sources/ats';
 import { extractJobFromUrl, upsertJob } from '../services/job.service';
-import { CV_MIME, extractText, parseCv, parseCvDeterministic } from '../services/documents/cvParser';
+import { CV_MIME, cvMimeOf, extractText, parseCv, parseCvDeterministic } from '../services/documents/cvParser';
 import { llmEnabled } from '../services/documents/llm';
 
 export async function loadProfile(userId: string) {
@@ -241,8 +241,14 @@ export class ProfileController {
     const userId = req.userId;
     const file = req.file;
     if (!file) throw new AppError(400, 'Attach your CV (PDF or DOCX) in the "cv" field');
+    const mime = cvMimeOf(file);
+    if (!mime) {
+      const old = /\.doc$/i.test(file.originalname ?? '');
+      throw new AppError(415, old ? 'Old Word (.doc) files can\'t be read. Open it in Word or Google Docs, save it as .docx or PDF, and upload that.' : 'Upload your CV as a PDF or a Word (.docx) file.', 'unsupported_file');
+    }
+    file.mimetype = mime;
 
-    const rawText = await extractText(file.buffer, file.mimetype).catch(() => {
+    const rawText = await extractText(file.buffer, mime).catch(() => {
       throw new AppError(422, 'This file looks damaged or isn\'t a real PDF/DOCX. Re-export it and try again, or fill in your profile manually.');
     });
     if (rawText.trim().length < 200) {

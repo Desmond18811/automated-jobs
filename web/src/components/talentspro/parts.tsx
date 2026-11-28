@@ -5,7 +5,7 @@ import { Icon, avatarTone, initialsOf } from './icons';
 export const cardStyle: CSSProperties = {
   background: 'rgba(255,255,255,.58)',
   border: '1px solid rgba(255,255,255,.95)',
-  borderRadius: 26,
+  borderRadius: 24,
   padding: 16,
   display: 'flex',
   flexDirection: 'column',
@@ -14,7 +14,7 @@ export const cardStyle: CSSProperties = {
 
 export const CardHead: FC<{ title: ReactNode; to?: string; cta?: string; extra?: ReactNode }> = ({ title, to, cta = 'All', extra }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 2px 4px 6px' }}>
-    <h2 style={{ margin: 0, fontSize: 17, fontWeight: 500, letterSpacing: '-.01em' }}>{title}</h2>
+    <h2 style={{ margin: 0, fontSize: 16, fontWeight: 500, letterSpacing: '-.01em' }}>{title}</h2>
     <span style={{ display: 'flex', gap: 8 }}>
     {extra}
     {to && (
@@ -41,16 +41,16 @@ export const Logo: FC<{ name: string; size?: number }> = ({ name, size = 46 }) =
 
 export const IconCircle: FC<{ name: string; size?: number }> = ({ name, size = 46 }) => (
   <span style={{ width: size, height: size, flex: `0 0 ${size}px`, borderRadius: '50%', background: '#F2F6FF', border: '1px solid #E6EDFA', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-    <Icon name={name} size={19} />
+    <Icon name={name} size={20} />
   </span>
 );
 
 export const EmptyState: FC<{ icon: string; title: string; body: string; cta?: { to: string; label: string } }> = ({ icon, title, body, cta }) => (
   <div style={{ background: '#fff', borderRadius: 20, padding: '16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
-    <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#F2F6FF', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Icon name={icon} size={18} />
+    <span style={{ width: 36, height: 36, borderRadius: '50%', background: '#F2F6FF', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name={icon} size={16} />
     </span>
-    <div style={{ fontSize: 15, fontWeight: 500 }}>{title}</div>
+    <div style={{ fontSize: 14, fontWeight: 500 }}>{title}</div>
     <div style={{ fontSize: 12, color: '#606979', maxWidth: 240, lineHeight: 1.4 }}>{body}</div>
     {cta && (
       <Link to={cta.to} className="tp-btn-ghost" style={{ height: 36, padding: '0 16px', borderRadius: 999, border: '1px solid #DCE3EE', background: 'rgba(255,255,255,.6)', fontSize: 12, fontWeight: 500, color: '#17191F', display: 'inline-flex', alignItems: 'center' }}>

@@ -478,10 +478,11 @@ export function activateMemoryDb(): void {
 
   // 3. Profile
   (Profile as any).findOne = (query: any) => {
-    let p = memoryProfiles.find(
-      (x) =>
-        (query.userId && String(x.userId) === String(query.userId)) ||
-        (query._id && String(x._id) === String(query._id)),
+    const byId = query.userId || query._id;
+    let p = memoryProfiles.find((x) =>
+      byId
+        ? (query.userId && String(x.userId) === String(query.userId)) || (query._id && String(x._id) === String(query._id))
+        : Object.entries(query || {}).every(([k, v]) => v != null && String(x[k]) === String(v)),
     );
     // Unknown users have no profile; loadProfile() creates an empty draft. Never hand a new user
     // someone else's seeded data.
@@ -504,6 +505,13 @@ export function activateMemoryDb(): void {
         _id: new Types.ObjectId(),
         ...query,
         ...updateData,
+        get(key: string) {
+          return (this as any)[key];
+        },
+        set(keyOrObj: any, val?: any) {
+          if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
+          else (this as any)[keyOrObj] = val;
+        },
         toObject() {
           return { ...this };
         },
@@ -549,6 +557,9 @@ export function activateMemoryDb(): void {
       set(keyOrObj: any, val?: any) {
         if (typeof keyOrObj === 'object') Object.assign(this, keyOrObj);
         else this[keyOrObj] = val;
+      },
+      get(key: string) {
+        return (this as any)[key];
       },
       toObject() {
         return { ...this };
@@ -748,6 +759,7 @@ export function activateMemoryDb(): void {
       return Promise.resolve(d);
     };
     d.set = (k: any, v?: any) => (typeof k === 'object' ? Object.assign(d, k) : (d[k] = v));
+    d.get = (k: string) => d[k];
     d.markModified = () => undefined;
     d.toObject = () => ({ ...d });
     store.push(d);

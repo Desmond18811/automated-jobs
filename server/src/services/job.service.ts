@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { isDupKey } from '../lib/http';
 import { assertPublicUrl, fetchText } from '../lib/net';
 import { getBrowser } from '../lib/browser';
+import { getLiveContext } from '../lib/liveBrowser';
+import { env } from '../config/env';
 import { clip, dedupeHashOf, fingerprintOf, safeHost } from '../lib/normalize';
 import { decodeEntities, htmlToText } from '../lib/text';
 import type { RawJob } from '../sources/types';
@@ -127,11 +129,18 @@ export async function extractJobFromUrl(url: string, renderedHtml?: string): Pro
   }
 }
 
+/** Pages that answered with a bot check or a sign-in wall instead of the posting. */
+export function looksBlocked(html: string): boolean {
+  const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? '').toLowerCase();
+  if (/just a moment|security check|attention required|access denied|verify you are human|are you a robot|blocked|captcha/.test(title)) return true;
+  return htmlToText(html).length < 400;
+}
+
 /** Many job pages (Workday, Ashby, Lever SPAs) render the posting with JavaScript; a plain fetch gets a shell. */
 async function renderHtml(url: string): Promise<string> {
   await assertPublicUrl(url);
   const browser = await getBrowser();
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'en-GB', viewport: { width: 1366, height: 900 } });
   try {
     const page = await context.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -143,22 +152,70 @@ async function renderHtml(url: string): Promise<string> {
 }
 
 /**
+ * Sites like Indeed and LinkedIn turn away servers and headless browsers. The JAVI window is the user's own
+ * visible browser with their sign-ins, so the page loads exactly as it does for them. Opens a tab, reads, closes it.
+ */
+async function renderInLiveBrowser(url: string): Promise<string> {
+  if (env.APPLY_BROWSER !== 'live') throw new Error('The JAVI browser is off (APPLY_BROWSER=headless)');
+  await assertPublicUrl(url);
+  const context = await getLiveContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+    // A bot check that clears by itself (Cloudflare's "Just a moment") needs a few seconds.
+    for (let i = 0; i < 6 && looksBlocked(await page.content()); i++) await page.waitForTimeout(1500);
+    return await page.content();
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Reads a job page the way a person would: a plain request first, then a browser, then the user's own
+ * JAVI window for sites that block both. Throws only when every way failed; the message says why.
+ */
+export async function readJobPage(url: string): Promise<Partial<RawJob>> {
+  const reasons: string[] = [];
+  const good = (f: Partial<RawJob> | null) => !!f?.title && (f.description ?? '').length >= 600;
+  let best: Partial<RawJob> = {};
+  const keep = (f: Partial<RawJob> | null) => {
+    if (f && (f.description ?? '').length > (best.description ?? '').length) best = { ...best, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) };
+  };
+
+  try {
+    const html = await fetchText(url);
+    if (!looksBlocked(html)) keep(await extractJobFromUrl(url, html));
+    else reasons.push('the site blocked a direct request');
+  } catch (err) {
+    reasons.push(err instanceof Error ? err.message : String(err));
+  }
+  if (good(best)) return best;
+
+  for (const [name, render] of [['browser', renderHtml], ['JAVI window', renderInLiveBrowser]] as const) {
+    try {
+      const html = await render(url);
+      if (looksBlocked(html)) {
+        reasons.push(`the ${name} was shown a bot check`);
+        continue;
+      }
+      keep(await extractJobFromUrl(url, html));
+      if (good(best)) return best;
+    } catch (err) {
+      reasons.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (best.title) return best;
+  throw new Error(reasons.join('; ') || 'the page had no job posting on it');
+}
+
+/**
  * A pasted link → a saved job with the full posting text, ready for matching and CV tailoring.
  * Falls back to rendering in a browser when the fetched page has too little text to tailor against.
  */
 export async function jobFromLink(url: string): Promise<{ job: JobPostDoc; isNew: boolean; rendered: boolean }> {
-  let found = await extractJobFromUrl(url).catch(() => ({}) as Partial<RawJob>);
-  let rendered = false;
-  if (!found.title || (found.description ?? '').length < 600) {
-    const html = await renderHtml(url).catch(() => null);
-    if (html) {
-      const again = await extractJobFromUrl(url, html).catch(() => null);
-      if (again && (again.description ?? '').length > (found.description ?? '').length) {
-        found = { ...found, ...Object.fromEntries(Object.entries(again).filter(([, v]) => v)) };
-        rendered = true;
-      }
-    }
-  }
+  const found = await readJobPage(url).catch(() => ({}) as Partial<RawJob>);
+  const rendered = !!found.description;
   const result = await upsertJob({
     source: 'link',
     url,

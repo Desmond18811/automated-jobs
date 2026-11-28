@@ -47,7 +47,7 @@ export const Jobs: FC<{ saved?: boolean }> = ({ saved: savedTab = false }) => {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 500, letterSpacing: '-.025em' }}>{savedTab ? 'Saved jobs' : 'Find jobs'}</h1>
           <p style={{ margin: '8px 0 0', fontSize: 14, color: '#606979' }}>{savedTab ? 'Jobs you kept to come back to.' : 'Scan roles, save the ones to look at later, or add a link of your own.'}</p>
         </div>
-        <button type="button" className="tp-btn-primary" onClick={() => setAdding(true)} style={{ ...primaryBtn, gap: 8, color: '#fff' }}><Icon name="plus" size={16} sw={2} />Add job</button>
+        <button type="button" className="tp-btn-primary" onClick={() => setAdding(true)} style={{ ...primaryBtn, gap: 8, color: '#fff' }}><Icon name="plus" size={16} />Add job</button>
       </div>
 
       <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -63,7 +63,7 @@ export const Jobs: FC<{ saved?: boolean }> = ({ saved: savedTab = false }) => {
             className="tp-search"
             style={{ marginLeft: 'auto', flex: '1 1 260px', maxWidth: 420, height: 48, padding: '0 6px 0 16px', borderRadius: 999, background: '#fff', border: '1px solid #E3E9F2', display: 'flex', alignItems: 'center', gap: 10 }}
           >
-            <span style={{ color: '#606979', display: 'flex' }}><Icon name="search" size={17} /></span>
+            <span style={{ color: '#606979', display: 'flex' }}><Icon name="search" size={16} /></span>
             <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Role, company or place" aria-label="Search jobs" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'none', font: 'inherit', fontSize: 13 }} />
             <button type="submit" className="tp-btn-primary" style={{ ...primaryBtn, height: 36, padding: '0 16px', fontSize: 12, color: '#fff' }}>Scan</button>
           </form>
@@ -93,8 +93,8 @@ export const Jobs: FC<{ saved?: boolean }> = ({ saved: savedTab = false }) => {
                   {money(j.salary) && <span style={{ fontSize: 12, color: '#606979' }}>{money(j.salary)}</span>}
                   {match !== null && <span style={{ fontSize: 12, fontWeight: 500, background: '#EAF1FF', color: '#1746C7', padding: '5px 11px', borderRadius: 999 }}>{match}% match</span>}
                   {j.url && /^https?:/.test(j.url) && <a href={j.url} target="_blank" rel="noopener noreferrer" className="tp-btn-ghost" style={{ ...ghostBtn, height: 40, padding: '0 16px', fontSize: 12 }}>Open</a>}
-                  <button type="button" aria-label={on ? 'Remove from saved' : 'Save job'} aria-pressed={on} disabled={busy === id} onClick={() => toggle(id)} className="tp-icon-btn" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid #E3E9F2', background: on ? '#EAF1FF' : '#fff', color: on ? '#2457E8' : '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="star" size={17} />
+                  <button type="button" aria-label={on ? 'Remove from saved' : 'Save job'} aria-pressed={on} disabled={busy === id} onClick={() => toggle(id)} className="tp-icon-btn" style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid #E3E9F2', background: on ? '#EAF1FF' : '#fff', color: on ? '#2457E8' : '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="star" size={16} />
                   </button>
                 </div>
               );

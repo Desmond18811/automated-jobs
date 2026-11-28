@@ -65,13 +65,24 @@ function resolveAnswer(raw: string, options?: string[]): string {
 export async function handleWhatsAppText(from: string, body: string): Promise<string> {
   const profile = await profileByPhone(from);
   if (!profile) return "JAVI doesn't recognise this number. Add it to your profile (Identity step) to reply here.";
+  return handleTextReply(String(profile.userId), body);
+}
 
-  const open = await Task.find({ userId: profile.userId, status: 'open' }).sort({ createdAt: -1 });
+/**
+ * One typed reply from a user (WhatsApp, Telegram), already matched to their account. `taskId` pins the
+ * task when the channel knows it (a Telegram reply to the question's message); otherwise the reply code
+ * at the start of the text, or the only open task, decides.
+ */
+export async function handleTextReply(userId: string, body: string, opts: { taskId?: string } = {}): Promise<string> {
+  const all = await Task.find({ userId, status: 'open' }).sort({ createdAt: -1 });
+  // Some stores ignore the filter; keep only this user's open tasks.
+  const open = all.filter((t: any) => String(t.userId) === String(userId) && t.status === 'open');
   if (!open.length) return 'Nothing is waiting on you right now. 👍';
 
   const m = body.trim().match(/^(\d{4,5})\b\s*([\s\S]*)$/);
-  let task = m ? open.find((t) => t.replyCode === m[1]) : undefined;
-  const rest = (m && task ? m[2] : body).trim();
+  let task = opts.taskId ? open.find((t: any) => String(t._id ?? t.id) === opts.taskId) : undefined;
+  if (!task && m) task = open.find((t) => t.replyCode === m[1]);
+  const rest = (m && task && task.replyCode === m[1] ? m[2] : body).trim();
   if (!task) {
     if (open.length > 1) {
       return `You have ${open.length} things waiting. Start your reply with the code from the message, e.g. "${open[0].replyCode} yes". Codes: ${open

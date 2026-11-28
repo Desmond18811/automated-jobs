@@ -7,6 +7,19 @@ export const CV_MIME = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 } as const;
 
+/**
+ * The CV's real type. Browsers often send Word files as application/octet-stream (or nothing), so fall back
+ * to the extension, then to the file's first bytes (%PDF, or PK for the zip inside a .docx).
+ */
+export function cvMimeOf(file: { mimetype?: string; originalname?: string; buffer: Buffer }): string | null {
+  if (file.mimetype === CV_MIME.pdf || file.mimetype === CV_MIME.docx) return file.mimetype;
+  const ext = (file.originalname ?? '').toLowerCase().split('.').pop();
+  const head = file.buffer.subarray(0, 4).toString('latin1');
+  if (head === '%PDF' || (ext === 'pdf' && head.startsWith('%P'))) return CV_MIME.pdf;
+  if (head.startsWith('PK') && (ext === 'docx' || !ext || file.mimetype === 'application/zip' || file.mimetype === 'application/octet-stream')) return CV_MIME.docx;
+  return null;
+}
+
 interface Item {
   x: number;
   y: number;

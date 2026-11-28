@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FC } from 'react';
-import { gmailApi, taxonomyApi, testApi } from '@/api';
+import { gmailApi, taxonomyApi, telegramApi, type TelegramStatus } from '@/api';
 import { CameraIcon, UserIcon } from '@/assets/icons';
 import { C, Field, Row, Section, StepHeader, TextInput, secondaryButton } from '../ui';
 import type { StepProps } from './types';
@@ -14,13 +14,17 @@ function resizeImage(file: File, size = 256): Promise<string> {
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const g = canvas.getContext('2d')!;
+      // JPEG has no transparency; paint white first so transparent PNGs don't turn black.
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('Could not read that image'));
+      reject(new Error('This browser can\'t open that image. Use a JPG or PNG (iPhone HEIC photos need converting first).'));
     };
     img.src = url;
   });
@@ -28,12 +32,11 @@ function resizeImage(file: File, size = 256): Promise<string> {
 
 export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
   const photo = useRef<HTMLInputElement>(null);
+  const [photoError, setPhotoError] = useState('');
   const [countries, setCountries] = useState<string[]>([]);
   const address = draft.address ?? { city: '', country: '' };
   const setAddress = (partial: Partial<typeof address>) => patch({ address: { ...address, ...partial } });
 
-  const [testingWhatsApp, setTestingWhatsApp] = useState(false);
-  const [whatsAppMsg, setWhatsAppMsg] = useState<{ tone: 'ok' | 'danger'; text: string } | null>(null);
   const [gmailStatus, setGmailStatus] = useState<{ connected: boolean; address: string | null; configured?: boolean } | null>(null);
   const [gmailMsg, setGmailMsg] = useState('');
 
@@ -48,29 +51,61 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
       .catch(() => setGmailStatus({ connected: false, address: null })); // unknown, not "not configured"
   }, []);
 
-  const sendTestWhatsApp = async () => {
-    const raw = draft.phone?.trim();
-    if (!raw || raw.replace(/\D/g, '').length < 7) {
-      setWhatsAppMsg({ tone: 'danger', text: 'Please enter a valid phone number with country code (e.g. +234...)' });
-      return;
-    }
-    setTestingWhatsApp(true);
-    setWhatsAppMsg(null);
+  // Telegram: connect opens the bot with a one-time link; we watch for the chat to be connected.
+  const [tgStatus, setTgStatus] = useState<TelegramStatus | null>(null);
+  const [tgBusy, setTgBusy] = useState('');
+  const [tgMsg, setTgMsg] = useState<{ tone: 'ok' | 'danger'; text: string } | null>(null);
+  const tgWatch = useRef<ReturnType<typeof setInterval>>();
+  useEffect(() => {
+    telegramApi.status().then(setTgStatus, () => setTgStatus(null));
+    return () => clearInterval(tgWatch.current);
+  }, []);
+  const connectTelegram = async () => {
+    setTgMsg(null);
+    setTgBusy('connect');
     try {
-      const res = await testApi.testWhatsApp({
-        phone: raw,
-        message: 'Hello from J.A.V.I! Your phone number is verified and connected for live application alerts.',
-      });
-      setWhatsAppMsg({
-        tone: 'ok',
-        text: `✓ Alert sent to ${res.recipient || raw}! Check your WhatsApp for J.A.V.I's confirmation.`,
-      });
+      const { url } = await telegramApi.link();
+      window.open(url, '_blank', 'noopener');
+      setTgMsg({ tone: 'ok', text: 'Telegram is opening. Tap Start in the bot, then come back here.' });
+      clearInterval(tgWatch.current);
+      let tries = 0;
+      tgWatch.current = setInterval(async () => {
+        tries += 1;
+        const st = await telegramApi.status().catch(() => null);
+        if (st) setTgStatus(st);
+        if (st?.linked) {
+          clearInterval(tgWatch.current);
+          setTgMsg({ tone: 'ok', text: `Connected${st.username ? ` as @${st.username}` : ''}. J.A.V.I will message you there.` });
+        } else if (tries > 100) clearInterval(tgWatch.current);
+      }, 3000);
     } catch (err: any) {
-      setWhatsAppMsg({ tone: 'danger', text: err?.message || 'Could not send WhatsApp alert. Check number format.' });
+      setTgMsg({ tone: 'danger', text: err?.message || 'Could not start the Telegram connection.' });
     } finally {
-      setTestingWhatsApp(false);
+      setTgBusy('');
     }
   };
+  const testTelegram = async () => {
+    setTgBusy('test');
+    setTgMsg(null);
+    try {
+      await telegramApi.test();
+      setTgMsg({ tone: 'ok', text: 'Test message sent. Check Telegram.' });
+    } catch (err: any) {
+      setTgMsg({ tone: 'danger', text: err?.message || 'Could not send the test message.' });
+    } finally {
+      setTgBusy('');
+    }
+  };
+  const disconnectTelegram = async () => {
+    setTgBusy('unlink');
+    try {
+      setTgStatus(await telegramApi.unlink());
+      setTgMsg(null);
+    } finally {
+      setTgBusy('');
+    }
+  };
+
 
   return (
     <div>
@@ -101,7 +136,14 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
             style={{ display: 'none' }}
             onChange={async (e) => {
               const f = e.target.files?.[0];
-              if (f) patch({ avatarUrl: await resizeImage(f).catch(() => draft.avatarUrl) });
+              e.target.value = '';
+              if (!f) return;
+              try {
+                setPhotoError('');
+                patch({ avatarUrl: await resizeImage(f) });
+              } catch (err: any) {
+                setPhotoError(err?.message || 'Could not use that photo.');
+              }
             }}
           />
           <button type="button" onClick={() => photo.current?.click()} style={{ ...secondaryButton, height: 38, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -111,6 +153,11 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
             <button type="button" onClick={() => patch({ avatarUrl: '' })} style={{ ...secondaryButton, height: 38, border: 'none' }}>
               Remove
             </button>
+          )}
+          {photoError && (
+            <span role="alert" style={{ fontSize: 12, color: '#B4232F', flexBasis: '100%' }}>
+              {photoError}
+            </span>
           )}
         </div>
       </Section>
@@ -132,7 +179,7 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
             <TextInput type="email" value={draft.email} onChange={(v) => patch({ email: v })} autoComplete="email" />
           </Field>
         </Row>
-        <Field label="Phone (with country code)" required hint="Also where JAVI sends WhatsApp alerts when it needs you, e.g. for a CAPTCHA.">
+        <Field label="Phone (with country code)" required hint="Application forms ask for it. Alerts and questions from J.A.V.I go to Telegram (below).">
           <TextInput type="tel" value={draft.phone} onChange={(v) => patch({ phone: v })} placeholder="+234 803 123 4567" autoComplete="tel" />
         </Field>
         <Field label="Professional headline" required hint="One line, e.g. “Senior Product Designer · Fintech”.">
@@ -140,7 +187,7 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
         </Field>
       </Section>
 
-      <Section title="Channel connectivity (Email & Phone)" hint="Verify that JAVI can reach you on WhatsApp and submit applications using your email.">
+      <Section title="How J.A.V.I reaches you" hint="Your email is used on applications. Telegram is where J.A.V.I sends alerts and asks you questions when it needs an answer.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {/* Email Channel */}
           <div
@@ -211,61 +258,46 @@ export const IdentityStep: FC<StepProps> = ({ draft, patch }) => {
             )}
           </div>
 
-          {/* Phone Channel */}
-          <div
-            style={{
-              padding: '16px',
-              borderRadius: 12,
-              background: '#F8FAFC',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}
-          >
+          {/* Telegram */}
+          <div style={{ padding: '16px', borderRadius: 12, background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Phone & WhatsApp</span>
-              {draft.phone?.replace(/\D/g, '').length >= 7 ? (
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#047857', background: '#ECFDF5', padding: '2px 8px', borderRadius: 999 }}>
-                  ● Ready for alerts
-                </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Telegram</span>
+              {tgStatus?.linked ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#047857', background: '#ECFDF5', padding: '2px 8px', borderRadius: 999 }}>● Connected</span>
+              ) : tgStatus && !tgStatus.configured ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 999 }}>Not set up yet</span>
               ) : (
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FEF3C7', padding: '2px 8px', borderRadius: 999 }}>
-                  Phone required
-                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FEF3C7', padding: '2px 8px', borderRadius: 999 }}>Not connected</span>
               )}
             </div>
             <span style={{ fontSize: 13, color: '#334155', fontWeight: 500 }}>
-              {draft.phone || 'Enter your phone number above'}
+              {tgStatus?.linked ? `@${tgStatus.username || 'your chat'}` : tgStatus?.bot ? `Bot: @${tgStatus.bot}` : 'J.A.V.I bot'}
             </span>
             <span style={{ fontSize: 12, color: '#64748B', lineHeight: '17px' }}>
-              Instant WhatsApp alerts for interactive verification (e.g. CAPTCHAs, recruiter replies).
+              Alerts and questions, e.g. a CAPTCHA to solve or an answer a form needs. Tap a button or reply to the message to answer.
             </span>
-            <button
-              type="button"
-              disabled={testingWhatsApp || !draft.phone?.trim()}
-              onClick={sendTestWhatsApp}
-              style={{
-                ...secondaryButton,
-                height: 34,
-                fontSize: 12,
-                marginTop: 4,
-                alignSelf: 'flex-start',
-                background: testingWhatsApp ? '#E2E8F0' : '#FFFFFF',
-              }}
-            >
-              {testingWhatsApp ? 'Dispatching test…' : 'Test WhatsApp Connection'}
-            </button>
-            {whatsAppMsg && (
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: whatsAppMsg.tone === 'ok' ? '#047857' : '#B42318',
-                  marginTop: 2,
-                }}
-              >
-                {whatsAppMsg.text}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              {!tgStatus?.linked ? (
+                <button type="button" disabled={!!tgBusy || tgStatus?.configured === false} onClick={connectTelegram} style={{ ...secondaryButton, height: 34, fontSize: 12 }}>
+                  {tgBusy === 'connect' ? 'Opening…' : 'Connect Telegram'}
+                </button>
+              ) : (
+                <>
+                  <button type="button" disabled={!!tgBusy} onClick={testTelegram} style={{ ...secondaryButton, height: 34, fontSize: 12 }}>
+                    {tgBusy === 'test' ? 'Sending…' : 'Send test message'}
+                  </button>
+                  <button type="button" disabled={!!tgBusy} onClick={disconnectTelegram} style={{ ...secondaryButton, height: 34, fontSize: 12, border: 'none' }}>
+                    Disconnect
+                  </button>
+                </>
+              )}
+            </div>
+            {tgStatus?.configured === false && !tgMsg && (
+              <span style={{ fontSize: 12, color: '#64748B' }}>The Telegram bot isn't set up on this server yet. You can connect it later.</span>
+            )}
+            {tgMsg && (
+              <span role={tgMsg.tone === 'danger' ? 'alert' : 'status'} style={{ fontSize: 12, fontWeight: 500, color: tgMsg.tone === 'ok' ? '#047857' : '#B42318', marginTop: 2 }}>
+                {tgMsg.text}
               </span>
             )}
           </div>

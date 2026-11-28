@@ -124,6 +124,10 @@ export interface IProfile {
   headline?: string;
   email?: string;
   phone?: string;
+  /** Telegram chat JAVI sends alerts and questions to (set when the user taps Start in the bot). */
+  telegramChatId?: string;
+  telegramUsername?: string;
+  telegramLinkedAt?: Date;
   pronouns?: string;
   address?: Address;
   location?: string;
@@ -263,6 +267,9 @@ const profileSchema = new Schema<IProfile>(
     headline: { type: String, default: '' },
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
+    telegramChatId: { type: String, index: true },
+    telegramUsername: String,
+    telegramLinkedAt: Date,
     pronouns: String,
     address: addressSchema,
     location: String,

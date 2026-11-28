@@ -4,6 +4,7 @@ import { createApp } from './app';
 import { connectDb, disconnectDb } from './lib/db';
 import { logger } from './lib/logger';
 import { initSocketServer } from './lib/socket';
+import { startTelegramPolling, stopTelegramPolling } from './services/telegram.service';
 
 export const app = createApp();
 export let server: http.Server | null = null;
@@ -15,10 +16,13 @@ export async function startServer() {
   server.listen(env.PORT, () => {
     logger.info(`JAVI API server listening on :http://localhost:${env.PORT} 🟢`);
   });
+  // The bot listens in the API process only, so there is exactly one poller per token.
+  startTelegramPolling().catch((err) => logger.warn({ err: err?.message }, 'Telegram bot did not start'));
   return server;
 }
 
 export async function stopServer() {
+  stopTelegramPolling();
   if (server) {
     await new Promise<void>((resolve, reject) => {
       server!.close((err) => (err ? reject(err) : resolve()));

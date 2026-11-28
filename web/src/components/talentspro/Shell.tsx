@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type FC } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
-import { applicationsApi, authApi, notificationsApi, profileApi, tokenStorage } from '@/api';
+import { applicationsApi, authApi, notificationsApi, profileApi, tasksApi, tokenStorage } from '@/api';
 import { useSocket } from '@/hooks/useSocket';
 import { Icon, LogoMark, avatarTone, initialsOf } from './icons';
-import { ago, asList, useAsync } from './data';
+import { EVENT, KIND, ago, asList, useAsync } from './data';
 import { Calendar } from './Calendar';
 import './tp.css';
 
@@ -36,9 +36,19 @@ const circle = (size: number): CSSProperties => ({
   flex: `0 0 ${size}px`,
 });
 
-const Dot: FC<{ top?: number; right?: number }> = ({ top = 11, right = 11 }) => (
-  <span style={{ position: 'absolute', top, right, width: 7, height: 7, borderRadius: '50%', background: '#E36C77', border: '1.5px solid #fff' }} />
-);
+/** Unread count on the bell; shows 9+ past nine. */
+const Count: FC<{ n: number }> = ({ n }) => (n > 0 ? <span className="tp-bell-count" aria-hidden="true">{n > 9 ? '9+' : n}</span> : null);
+
+const NOTIF: Record<string, { icon: string; tone: 'blue' | 'amber' | 'green' | 'red'; to: string }> = {
+  draft_ready: { icon: 'doc', tone: 'blue', to: '/dash/applications' },
+  draft_needs_attention: { icon: 'doc', tone: 'amber', to: '/dash/applications' },
+  needs_user: { icon: 'user', tone: 'amber', to: '/dash/applications' },
+  sent: { icon: 'check', tone: 'green', to: '/dash/applications' },
+  send_blocked: { icon: 'close', tone: 'red', to: '/dash/applications' },
+  send_failed: { icon: 'close', tone: 'red', to: '/dash/applications' },
+  interview_invite: { icon: 'camera', tone: 'blue', to: '/dash/applications?stage=interview' },
+  default: { icon: 'bell', tone: 'blue', to: '/dash/applications' },
+};
 
 export const Shell: FC = () => {
   const nav = useNavigate();
@@ -46,11 +56,13 @@ export const Shell: FC = () => {
   const [me, setMe] = useState<TpContext['me']>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [panel, setPanel] = useState<'' | 'notifs' | 'account'>('');
+  const [panel, setPanel] = useState<'' | 'notifs' | 'account' | 'tasks'>('');
   const [toast, setToast] = useState('');
   const [params, setParams] = useSearchParams();
   const [calendar, setCalendar] = useState(params.get('calendar') === '1');
-  const [sentToday, setSentToday] = useState<number | null>(null);
+  const [today, setToday] = useState<any[] | null>(null);
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [ring, setRing] = useState(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -83,12 +95,15 @@ export const Shell: FC = () => {
     const from = new Date();
     from.setHours(0, 0, 0, 0);
     const to = new Date(from.getTime() + 864e5 - 1);
-    applicationsApi.activity(from, to).then((r) => setSentToday(r.events.filter((e: any) => e.to === 'sent').length), () => setSentToday(null));
+    applicationsApi.activity(from, to).then((r) => setToday(r.events ?? []), () => setToday([]));
   }, [loc.pathname]);
 
+  const tasks = useAsync(() => tasksApi.list(), [loc.pathname]);
+  const openTasks = asList(tasks.data, 'tasks');
   const notifs = useAsync(() => notificationsApi.list({ limit: 8 }), []);
   const list = asList(notifs.data, 'notifications');
   const unread = list.filter((n) => !n.readAt).length;
+  const shown = onlyUnread ? list.filter((n) => !n.readAt) : list;
 
   useSocket({
     onNotificationNew: (n: any) => {
@@ -96,6 +111,8 @@ export const Shell: FC = () => {
       clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToast(''), 4000);
       notifs.reload();
+      tasks.reload();
+      setRing((r) => r + 1);
     },
   });
 
@@ -123,6 +140,12 @@ export const Shell: FC = () => {
 
   const now = new Date();
   const nowPct = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
+  const tally = {
+    sent: (today ?? []).filter((e) => e.to === 'sent').length,
+    replies: (today ?? []).filter((e) => e.to === 'replied').length,
+    needs: (today ?? []).filter((e) => e.to === 'needs_user').length,
+    wins: (today ?? []).filter((e) => ['interview', 'offer', 'hired'].includes(e.to)).length,
+  };
   const nowLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -151,9 +174,9 @@ export const Shell: FC = () => {
           ),
         )}
         <div className="tp-rail-bottom" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <button type="button" data-tip="Notifications" aria-label="Notifications" className="tp-rail-btn tp-tip tp-rail-extra" onClick={() => setPanel(panel === 'notifs' ? '' : 'notifs')} style={railBtn(false)}>
-            <Icon name="bell" />
-            {unread > 0 && <Dot right={12} />}
+          <button type="button" data-tip="Notifications" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} aria-haspopup="dialog" aria-expanded={panel === 'notifs'} className={`tp-rail-btn tp-tip tp-rail-extra${unread ? ' has-unread' : ''}`} onClick={() => setPanel(panel === 'notifs' ? '' : 'notifs')} style={railBtn(panel === 'notifs')}>
+            <span key={ring} className={ring ? 'tp-ring' : undefined} style={{ display: 'flex' }}><Icon name="bell" /></span>
+            <Count n={unread} />
           </button>
           <NavLink to="/dash/messages" data-tip="Messages" aria-label="Messages" className="tp-rail-btn tp-tip tp-rail-extra" style={({ isActive }) => railBtn(isActive)}>
             <Icon name="mail" />
@@ -174,12 +197,36 @@ export const Shell: FC = () => {
       {panel && (
         <div
           role="dialog"
-          className="tp-pop"
-          style={{ position: 'fixed', left: 108, bottom: 24, width: 340, maxWidth: 'calc(100vw - 24px)', background: '#fff', borderRadius: 24, padding: 18, zIndex: 60, boxShadow: '0 1px 2px rgba(23,25,31,.05),0 26px 52px -22px rgba(23,25,31,.32)', transform: 'none' }}
+          className="tp-panel-in"
+          style={{ position: 'fixed', ...(panel === 'tasks' ? { top: 92, right: 40 } : { left: 124, bottom: 24 }), width: panel === 'notifs' ? 380 : 340, maxWidth: 'calc(100vw - 24px)', background: '#fff', borderRadius: 24, padding: 18, zIndex: 60, boxShadow: '0 1px 2px rgba(23,25,31,.05),0 26px 52px -22px rgba(23,25,31,.32)', transform: 'none' }}
         >
-          {panel === 'account' ? (
+          {panel === 'tasks' ? (
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>Needs you</div>
+              <div style={{ fontSize: 12, color: '#606979', marginBottom: 8 }}>J.A.V.I paused these applications until you answer.</div>
+              {tasks.loading ? (
+                <div style={{ fontSize: 13, color: '#606979', padding: '8px 0' }}>Loading…</div>
+              ) : tasks.error ? (
+                <div role="alert" style={{ fontSize: 13, color: '#B4232F', padding: '8px 0' }}>Couldn't load them: {tasks.error}</div>
+              ) : openTasks.length === 0 ? (
+                <div style={{ fontSize: 13, color: '#606979', padding: '8px 0' }}>Nothing is waiting on you. Applications are running on their own.</div>
+              ) : (
+                openTasks.slice(0, 6).map((t: any) => (
+                  <div key={t._id} style={{ padding: '10px 0', borderTop: '1px solid #EEF2F7', fontSize: 13 }}>
+                    <div style={{ fontWeight: 500 }}>{t.message || 'An application needs an answer'}</div>
+                    <div style={{ fontSize: 11, color: '#98A1AF', marginTop: 2 }}>
+                      {t.questions?.length ? `${t.questions.length} question${t.questions.length === 1 ? '' : 's'}, ` : ''}{ago(t.createdAt)}
+                    </div>
+                  </div>
+                ))
+              )}
+              <Link to="/dash/applications" className="tp-btn-ghost" style={{ marginTop: 8, height: 44, borderRadius: 999, border: '1px solid #DCE3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#17191F' }}>
+                Open applications
+              </Link>
+            </div>
+          ) : panel === 'account' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: 15, fontWeight: 500 }}>{displayName || 'Signed in'}</div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>{displayName || 'Signed in'}</div>
               <div style={{ fontSize: 12, color: '#606979' }}>{me?.email}</div>
               <Link to="/dash/profile" className="tp-btn-ghost" style={{ height: 44, borderRadius: 999, border: '1px solid #DCE3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#17191F' }}>
                 Profile
@@ -192,25 +239,62 @@ export const Shell: FC = () => {
               </button>
             </div>
           ) : (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>Notifications</div>
+            <div className="tp-notifs">
+              <div className="tp-notifs-head">
+                <div>
+                  <div className="tp-notifs-title">Notifications</div>
+                  <div className="tp-notifs-sub" role="status" aria-atomic="true">{unread ? `${unread} unread` : 'All read'}</div>
+                </div>
                 {unread > 0 && (
-                  <button type="button" onClick={() => notificationsApi.markAllRead().then(notifs.reload)} style={{ border: 0, background: 'none', color: '#2457E8', fontSize: 12, fontWeight: 500 }}>
+                  <button type="button" className="tp-notifs-link" onClick={() => notificationsApi.markAllRead().then(notifs.reload)}>
                     Mark all read
                   </button>
                 )}
               </div>
-              {list.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#606979', padding: '12px 0' }}>You're all caught up.</div>
-              ) : (
-                list.map((n) => (
-                  <div key={n._id || n.id} style={{ padding: '10px 0', borderTop: '1px solid #EEF2F7', fontSize: 13 }}>
-                    <div style={{ fontWeight: n.readAt ? 400 : 500 }}>{n.title || n.message}</div>
-                    <div style={{ fontSize: 11, color: '#98A1AF', marginTop: 2 }}>{ago(n.createdAt)}</div>
+              <div className="tp-notifs-tabs" role="group" aria-label="Show">
+                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)}>All</button>
+                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)}>Unread{unread ? ` ${unread}` : ''}</button>
+              </div>
+              <div className="tp-notifs-list">
+                {notifs.loading && list.length === 0 ? (
+                  <div className="tp-notifs-empty">Loading…</div>
+                ) : notifs.error ? (
+                  <div className="tp-notifs-empty" role="alert">
+                    Couldn't load notifications.{' '}
+                    <button type="button" className="tp-notifs-link" onClick={notifs.reload}>Try again</button>
                   </div>
-                ))
-              )}
+                ) : shown.length === 0 ? (
+                  <div className="tp-notifs-empty">
+                    <span className="tp-notifs-empty-icon"><Icon name="bell" size={18} /></span>
+                    <strong>{onlyUnread ? 'Nothing unread' : "You're all caught up"}</strong>
+                    <span>Sent applications, replies and anything that needs you will show up here.</span>
+                  </div>
+                ) : (
+                  shown.map((n) => {
+                    const k = NOTIF[n.type] ?? NOTIF.default;
+                    return (
+                      <button
+                        key={n._id || n.id}
+                        type="button"
+                        className={`tp-notif${n.readAt ? '' : ' is-unread'}`}
+                        onClick={() => {
+                          if (!n.readAt) void notificationsApi.markRead(n._id || n.id).then(notifs.reload, () => undefined);
+                          setPanel('');
+                          nav(k.to);
+                        }}
+                      >
+                        <span className={`tp-notif-icon is-${k.tone}`}><Icon name={k.icon} size={16} /></span>
+                        <span className="tp-notif-text">
+                          <span className="tp-notif-title">{n.title || n.message}</span>
+                          {n.body && <span className="tp-notif-body">{n.body}</span>}
+                          <span className="tp-notif-time">{ago(n.createdAt)}</span>
+                        </span>
+                        {!n.readAt && <span className="tp-notif-dot" aria-label="Unread" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -220,7 +304,7 @@ export const Shell: FC = () => {
         <header style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', position: 'relative', zIndex: 10 }}>
           <div className="tp-show-sm" style={{ alignItems: 'center', gap: 10, marginRight: 'auto' }}>
             <LogoMark size={36} />
-            <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-.01em' }}>TalentsPro</span>
+            <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-.01em' }}>TalentsPro</span>
           </div>
 
           {searchOpen ? (
@@ -235,45 +319,70 @@ export const Shell: FC = () => {
               }}
               style={{ flex: '0 1 280px', height: 48, padding: '0 4px 0 16px', borderRadius: 999, background: '#fff', border: '1px solid #E3E9F2', display: 'flex', alignItems: 'center', gap: 10 }}
             >
-              <span style={{ color: '#606979', display: 'flex' }}><Icon name="search" size={17} /></span>
-              <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={/^\/dash\/(jobs|saved)/.test(loc.pathname) ? 'Search jobs…' : 'Search applications…'} aria-label="Search" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'none', fontSize: 13, font: 'inherit' }} />
-              <button type="button" aria-label="Close search" onClick={() => setSearchOpen(false)} style={{ ...circle(40), border: 0, background: '#F5F8FC', color: '#606979' }}>
+              <span style={{ color: '#606979', display: 'flex' }}><Icon name="search" size={16} /></span>
+              <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={/^\/dash\/(jobs|saved)/.test(loc.pathname) ? 'Search jobs…' : 'Search applications…'} aria-label="Search" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'none', font: 'inherit', fontSize: 13 }} />
+              <button type="button" aria-label="Close search" onClick={() => setSearchOpen(false)} style={{ ...circle(44), border: 0, background: '#F5F8FC', color: '#606979' }}>
                 <Icon name="close" size={16} />
               </button>
             </form>
           ) : (
             <button type="button" aria-label="Search" className="tp-icon-btn" onClick={() => setSearchOpen(true)} style={{ ...circle(48), border: '1px solid #E3E9F2', background: 'rgba(255,255,255,.7)', color: '#17191F' }}>
-              <Icon name="search" size={19} />
+              <Icon name="search" size={20} />
             </button>
           )}
 
-          <div className="tp-hide-sm" style={{ flex: '1 1 760px', maxWidth: 860, minWidth: 0, position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px 4px 18px', borderRadius: 999, background: 'rgba(255,255,255,.78)', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 1px 2px rgba(23,25,31,.04),0 12px 28px -18px rgba(36,87,232,.22)' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#17191F', whiteSpace: 'nowrap' }}>Your Schedule</span>
-              <span style={{ height: 38, padding: '0 12px 0 4px', borderRadius: 999, border: '1px solid #E3E9F2', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                <span style={{ ...circle(30), background: '#F2F6FF', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="calendar" size={15} /></span>
-                {now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-              </span>
-              <div style={{ position: 'relative', height: 38, flex: '1 1 320px', minWidth: 220, borderRadius: 999, background: 'linear-gradient(90deg,#E2EBFF 0%,#E6EFFB 32%,#DFF4EB 65%,#FFF0CD 100%)', display: 'flex', alignItems: 'center', padding: '0 8px', gap: 4 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,.9)', padding: '2px 9px 2px 3px', borderRadius: 999, fontSize: 10.5, fontWeight: 600, color: '#17191F', boxShadow: '0 1px 2px rgba(23,25,31,.06)', zIndex: 1 }}>
-                  <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#2457E8', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>✓</span>
-                  <span>{sentToday === null ? 'Today' : `${sentToday} sent today`}</span>
-                </span>
-                <div style={{ position: 'absolute', left: `${Math.min(Math.max(nowPct, 28), 72)}%`, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none', transform: 'translateX(-50%)', zIndex: 2 }}>
-                  <span style={{ position: 'absolute', top: -14, background: '#2457E8', color: '#fff', fontSize: 10, fontWeight: 600, padding: '2.5px 7px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 4px 10px -2px rgba(36,87,232,.6)' }}>{nowLabel}</span>
-                  <span style={{ position: 'absolute', top: 5, bottom: 5, width: 2, background: '#2457E8' }} />
-                  <span className="tp-pulse" style={{ position: 'absolute', bottom: 2, width: 6, height: 6, borderRadius: '50%', background: '#2457E8' }} />
-                </div>
-              </div>
-              <button type="button" aria-label="Open calendar" onClick={() => setCalendar(true)} className="tp-icon-btn" style={{ ...circle(38), border: '1px solid #E3E9F2', background: '#fff', color: '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Icon name="arrow" size={15} sw={1.8} />
-              </button>
+          <div className="tp-hide-sm tp-today" style={{ flex: '1 1 auto', maxWidth: 1180, minWidth: 0, margin: '0 auto' }}>
+            <div className="tp-today-date">
+              <strong>Today</strong>
+              <span>{now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             </div>
+            <div className="tp-today-track" role="img" aria-label={`Today's activity: ${tally.sent} sent, ${tally.replies} replies, ${tally.needs} waiting on you`}>
+              <span className="tp-today-past" style={{ width: `${nowPct}%` }} />
+              <span className="tp-today-future" style={{ left: `${nowPct}%` }} />
+              {[6, 12, 18].map((h) => (
+                <span key={h} className="tp-today-hour" style={{ left: `${(h / 24) * 100}%` }}>{String(h).padStart(2, '0')}</span>
+              ))}
+              {(today ?? []).map((e, i) => {
+                const at = new Date(e.at);
+                const kind = KIND[e.to] ?? 'other';
+                return (
+                  <span
+                    key={i}
+                    className={`tp-today-tick is-${kind}`}
+                    style={{ left: `${((at.getHours() * 60 + at.getMinutes()) / 1440) * 100}%` }}
+                    title={`${at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${EVENT[e.to] || e.to}${e.job?.title ? `, ${e.job.title}` : ''}${e.job?.company ? ` at ${e.job.company}` : ''}`}
+                  />
+                );
+              })}
+              <span className="tp-today-now" style={{ left: `${nowPct}%` }}>
+                <span>{nowLabel}</span>
+              </span>
+            </div>
+            <span className="tp-today-sum" role="status" aria-atomic="true">
+              {today === null ? 'Loading…' : today.length === 0 ? 'Nothing yet today' : (
+                <>
+                  <b>{tally.sent}</b> sent{tally.replies > 0 && <>, <b>{tally.replies}</b> {tally.replies === 1 ? 'reply' : 'replies'}</>}
+                  {tally.wins > 0 && <>, <b>{tally.wins}</b> {tally.wins === 1 ? 'interview' : 'interviews'}</>}
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              className={`tp-today-needs${openTasks.length ? ' is-on' : ''}`}
+              onClick={() => setPanel(panel === 'tasks' ? '' : 'tasks')}
+              aria-haspopup="dialog"
+              aria-expanded={panel === 'tasks'}
+            >
+              {openTasks.length ? <><span className="tp-today-dot" />{openTasks.length} need{openTasks.length === 1 ? 's' : ''} you</> : <><Icon name="check" size={14} />All clear</>}
+            </button>
+            <button type="button" aria-label="Open calendar" onClick={() => setCalendar(true)} className="tp-icon-btn" style={{ ...circle(36), border: '1px solid #E3E9F2', background: '#fff', color: '#17191F', flexShrink: 0 }}>
+              <Icon name="calendar" size={16} />
+            </button>
           </div>
 
-          <button type="button" aria-label="Notifications" className="tp-icon-btn tp-show-sm" onClick={() => setPanel(panel === 'notifs' ? '' : 'notifs')} style={{ ...circle(48), position: 'relative', border: '1px solid #E3E9F2', background: 'rgba(255,255,255,.7)', color: '#17191F' }}>
-            <Icon name="bell" size={19} />
-            {unread > 0 && <Dot />}
+          <button type="button" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} aria-haspopup="dialog" aria-expanded={panel === 'notifs'} className="tp-icon-btn tp-show-sm" onClick={() => setPanel(panel === 'notifs' ? '' : 'notifs')} style={{ ...circle(48), position: 'relative', border: '1px solid #E3E9F2', background: 'rgba(255,255,255,.7)', color: '#17191F' }}>
+            <span key={ring} className={ring ? 'tp-ring' : undefined} style={{ display: 'flex' }}><Icon name="bell" size={20} /></span>
+            <Count n={unread} />
           </button>
           <Link to="/dash/profile" aria-label="Settings" className="tp-icon-btn tp-hide-sm" style={{ ...circle(48), border: '1px solid #E3E9F2', background: 'rgba(255,255,255,.7)', color: '#17191F' }}>
             <Icon name="settings" size={20} />

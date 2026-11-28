@@ -36,6 +36,7 @@ router.post('/logout-all', requireAuth, asyncHandler(AuthController.logoutAll));
 router.get('/sessions', requireAuth, asyncHandler(AuthController.sessions));
 router.delete('/sessions/:id', requireAuth, asyncHandler(AuthController.revokeSession));
 router.put('/onboarding-stage', requireAuth, asyncHandler(AuthController.updateOnboardingStage));
+router.post('/skip-setup', requireAuth, asyncHandler(AuthController.skipSetup));
 router.get('/me', requireAuth, asyncHandler(AuthController.me));
 
 export default router;

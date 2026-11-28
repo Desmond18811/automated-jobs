@@ -112,7 +112,7 @@ export const Home: FC = () => {
           </h1>
           <p style={{ margin: '14px 0 0', fontSize: 13, color: '#606979' }}>Today is {today}</p>
           <div style={{ display: 'flex', gap: 10, marginTop: 34, flexWrap: 'wrap' }}>
-            <button type="button" className="tp-btn-primary" onClick={() => setAdding(true)} style={{ ...primaryBtn, color: '#fff', gap: 8 }}><Icon name="plus" size={16} sw={2} />Add a job</button>
+            <button type="button" className="tp-btn-primary" onClick={() => setAdding(true)} style={{ ...primaryBtn, color: '#fff', gap: 8 }}><Icon name="plus" size={16} />Add a job</button>
             <button type="button" className="tp-btn-ghost" onClick={openCalendar} style={ghostBtn}>Calendar</button>
           </div>
         </div>
@@ -129,7 +129,7 @@ export const Home: FC = () => {
             </div>
           </div>
 
-          <div style={{ position: 'relative', marginTop: 64, background: 'rgba(255,255,255,.84)', border: '1px solid #fff', borderRadius: 26, padding: '20px 8px 8px', boxShadow: '0 1px 2px rgba(23,25,31,.04),0 18px 40px -24px rgba(36,87,232,.3)' }}>
+          <div style={{ position: 'relative', marginTop: 64, background: 'rgba(255,255,255,.84)', border: '1px solid #fff', borderRadius: 24, padding: '20px 8px 8px', boxShadow: '0 1px 2px rgba(23,25,31,.04),0 18px 40px -24px rgba(36,87,232,.3)' }}>
             <div style={{ position: 'absolute', left: 22, right: 74, top: 9, height: 4, borderRadius: 4, background: '#E9EEF5' }}>
               <div className="tp-grow" style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#A7C0FA,#2457E8)' }} />
               <div style={{ position: 'absolute', left: `${pct}%`, top: -34, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -142,9 +142,9 @@ export const Home: FC = () => {
               {loading
                 ? [0, 1, 2, 3].map((i) => <div key={i} style={{ flex: '1 1 128px', padding: 8 }}><Skeleton h={30} r={15} /></div>)
                 : steps.map((s, i) => (
-                    <Link key={s.key} to="/setup?edit=1" style={{ flex: '1 1 128px', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 18, background: i === current ? '#EDF3FF' : 'transparent', color: '#17191F', minWidth: 0 }}>
+                    <Link key={s.key} to="/setup?edit=1" style={{ flex: '1 1 128px', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 20, background: i === current ? '#EDF3FF' : 'transparent', color: '#17191F', minWidth: 0 }}>
                       <span style={{ width: 30, height: 30, flex: '0 0 30px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: s.done ? '#2457E8' : i === current ? '#fff' : '#F1F4F8', border: s.done ? 0 : i === current ? '2px solid #2457E8' : '1px solid #E3E8F0', color: '#fff' }}>
-                        {s.done ? <Icon name="check" size={15} sw={2.4} /> : <span style={{ width: i === current ? 8 : 6, height: i === current ? 8 : 6, borderRadius: '50%', background: i === current ? '#2457E8' : '#B7BFCA' }} />}
+                        {s.done ? <Icon name="check" size={16} /> : <span style={{ width: i === current ? 8 : 6, height: i === current ? 8 : 6, borderRadius: '50%', background: i === current ? '#2457E8' : '#B7BFCA' }} />}
                       </span>
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
@@ -153,7 +153,7 @@ export const Home: FC = () => {
                     </Link>
                   ))}
               <button type="button" aria-label="Continue profile setup" className="tp-icon-btn" onClick={() => nav('/setup?edit=1')} style={{ width: 48, height: 48, borderRadius: '50%', border: '1px solid #E3E9F2', background: '#fff', color: '#17191F', marginLeft: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="arrowRight" size={18} sw={1.8} />
+                <Icon name="arrowRight" size={16} />
               </button>
             </div>
           </div>
@@ -180,7 +180,7 @@ export const Home: FC = () => {
                     <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.title || 'Interview'}</div>
                     <div style={{ fontSize: 12, color: '#606979', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{j.company}</div>
                   </div>
-                  <span style={{ background: '#2457E8', color: '#fff', fontSize: 11.5, fontWeight: 600, padding: '6px 13px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0 }}>{ago(a.updatedAt)}</span>
+                  <span style={{ background: '#2457E8', color: '#fff', fontSize: 12, fontWeight: 600, padding: '6px 13px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0 }}>{ago(a.updatedAt)}</span>
                 </Link>
               );
             })
@@ -204,7 +204,7 @@ export const Home: FC = () => {
                   <div style={{ fontSize: 12, color: '#606979', marginTop: 4 }}>Applications sent</div>
                 </div>
                 <Link to="/dash/applications" aria-label="Open applications" className="tp-icon-btn" style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid #E3E9F2', color: '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="arrow" size={16} sw={1.8} />
+                  <Icon name="arrow" size={16} />
                 </Link>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
@@ -233,7 +233,7 @@ export const Home: FC = () => {
 
       <section style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, alignItems: 'stretch', flex: '1 0 auto' }}>
         <div className="tp-card" style={{ ...cardStyle, flex: '1.35 1 560px', gap: 14 }}>
-          <CardHead title="Recommended Jobs" to="/dash/jobs" extra={<button type="button" onClick={() => setAdding(true)} className="tp-btn-primary" style={{ ...primaryBtn, height: 36, padding: '0 14px', fontSize: 12, gap: 6 }}><Icon name="plus" size={14} sw={2} />Add job</button>} />
+          <CardHead title="Recommended Jobs" to="/dash/jobs" extra={<button type="button" onClick={() => setAdding(true)} className="tp-btn-primary" style={{ ...primaryBtn, height: 36, padding: '0 14px', fontSize: 12, gap: 6 }}><Icon name="plus" size={14} />Add job</button>} />
           <div className="tp-jobs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 10 }}>
             {apps.loading ? (
               [0, 1].map((i) => <Skeleton key={i} h={96} r={20} />)
@@ -248,8 +248,8 @@ export const Home: FC = () => {
                       <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.title}</div>
                       <div style={{ fontSize: 12, color: '#606979', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[j.company, j.location].filter(Boolean).join(' · ')}</div>
                     </div>
-                    <Link to="/dash/applications" aria-label="View" className="tp-icon-btn" style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid #E3E9F2', color: '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Icon name="arrow" size={14} sw={1.8} />
+                    <Link to="/dash/applications" aria-label="View" className="tp-icon-btn" style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid #E3E9F2', color: '#17191F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon name="arrow" size={14} />
                     </Link>
                   </div>
                   {(match !== null || money(j.salary)) && (
@@ -294,7 +294,7 @@ export const Home: FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, background: '#EDF1F7', padding: 4, borderRadius: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, background: '#EDF1F7', padding: 4, borderRadius: 14 }}>
                 {(['pro', 'pro_max', 'enterprise'] as const).map((pk) => {
                   const isCurrent = activePlanKey === pk;
                   return (
@@ -320,7 +320,7 @@ export const Home: FC = () => {
                         fontSize: 12,
                         cursor: 'pointer',
                         boxShadow: isCurrent ? '0 1px 3px rgba(23,25,31,.08)' : 'none',
-                        transition: 'all .2s ease',
+                        transition: 'background-color .2s ease, color .2s ease, box-shadow .2s ease',
                       }}
                     >
                       {PLANS[pk].name}
@@ -329,10 +329,10 @@ export const Home: FC = () => {
                 })}
               </div>
 
-              <div style={{ background: '#fff', borderRadius: 18, padding: '12px 14px', fontSize: 12, color: '#4B5565', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ background: '#fff', borderRadius: 20, padding: '12px 14px', fontSize: 12, color: '#4B5565', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {currentPlan.perks.map((perk, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: '#2457E8', fontWeight: 700, fontSize: 12 }}>✓</span>
+                    <span style={{ color: '#2457E8', display: 'inline-flex' }}><Icon name="check" size={14} sw={2.2} /></span>
                     <span>{perk}</span>
                   </div>
                 ))}

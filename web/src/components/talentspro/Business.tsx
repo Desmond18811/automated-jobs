@@ -28,8 +28,8 @@ const num = (n?: number) => (typeof n === 'number' ? n.toLocaleString('en-GB', {
 const msg = (e: any) => e?.message || 'Something went wrong. Try again.';
 
 const field: CSSProperties = { width: '100%', height: 44, borderRadius: 14, border: '1px solid #DCE3EE', background: '#fff', padding: '0 14px', fontSize: 14, fontFamily: 'inherit', color: '#17191F' };
-const label: CSSProperties = { fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.05em', color: '#606979' };
-const small: CSSProperties = { ...ghostBtn, height: 38, padding: '0 16px', fontSize: 12 };
+const label: CSSProperties = { fontSize: 12, fontWeight: 500, color: '#606979' };
+const small: CSSProperties = { ...ghostBtn, height: 36, padding: '0 16px', fontSize: 12 };
 
 const Err: FC<{ text: string }> = ({ text }) => (text ? <div role="alert" style={{ fontSize: 13, color: '#B4232F', lineHeight: 1.45 }}>{text}</div> : null);
 const Section: FC<{ title: string; children: ReactNode; right?: ReactNode }> = ({ title, children, right }) => (
@@ -101,11 +101,11 @@ const LeadDrawer: FC<{ id: string; onClose: () => void; onChanged: () => void }>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {lead && <Logo name={lead.name} size={46} />}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead?.name ?? 'Loading…'}</h2>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead?.name ?? 'Loading…'}</h2>
             {lead && <div style={{ fontSize: 12, color: '#606979' }}>{[vert?.label ?? lead.vertical, lead.area, lead.address].filter(Boolean).join(' · ')}</div>}
           </div>
           {lead && <Badge bg={STATUS[lead.status].bg} fg={STATUS[lead.status].fg}>{STATUS[lead.status].label}</Badge>}
-          <button type="button" aria-label="Close" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', border: 0, background: '#EDF1F6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={16} /></button>
+          <button type="button" aria-label="Close" onClick={onClose} style={{ width: 36, height: 36, borderRadius: '50%', border: 0, background: '#EDF1F6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={16} /></button>
         </div>
 
         {res.loading && <Skeleton h={200} r={20} />}
@@ -160,7 +160,7 @@ const LeadDrawer: FC<{ id: string; onClose: () => void; onChanged: () => void }>
 
             <Section title="Quote" right={
               <div style={{ display: 'flex', gap: 6 }}>
-                <select aria-label="Offer" value={offer} onChange={(e) => setOffer(e.target.value)} style={{ ...field, height: 38, width: 'auto', fontSize: 12 }}>
+                <select aria-label="Offer" value={offer} onChange={(e) => setOffer(e.target.value)} style={{ ...field, height: 36, width: 'auto', fontSize: 12 }}>
                   <option value="">Best fit</option>
                   {catalog.data?.offers.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </select>
@@ -174,7 +174,7 @@ const LeadDrawer: FC<{ id: string; onClose: () => void; onChanged: () => void }>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, textTransform: 'capitalize', fontWeight: 600 }}>{t.tier}{t.recommended && <span style={{ color: '#2457E8' }}>Recommended</span>}</div>
                         <div style={{ fontSize: 13, marginTop: 6 }}>{num(t.setup)} setup</div>
                         <div style={{ fontSize: 13 }}>{num(t.monthly)} / month</div>
-                        <ul style={{ margin: '8px 0 0', paddingLeft: 16, fontSize: 11.5, color: '#606979' }}>{t.includes.map((x) => <li key={x}>{x}</li>)}</ul>
+                        <ul style={{ margin: '8px 0 0', paddingLeft: 16, fontSize: 12, color: '#606979' }}>{t.includes.map((x) => <li key={x}>{x}</li>)}</ul>
                       </div>
                     ))}
                   </div>
@@ -186,17 +186,17 @@ const LeadDrawer: FC<{ id: string; onClose: () => void; onChanged: () => void }>
 
             <Section title="Outreach">
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <select aria-label="Pitch angle" value={variant} onChange={(e) => setVariant(e.target.value as LeadPitch['variant'])} style={{ ...field, height: 38, width: 'auto', fontSize: 12 }}>
+                <select aria-label="Pitch angle" value={variant} onChange={(e) => setVariant(e.target.value as LeadPitch['variant'])} style={{ ...field, height: 36, width: 'auto', fontSize: 12 }}>
                   <option value="observation">Something I noticed</option>
                   <option value="question">A question</option>
                   <option value="proof">Proof</option>
                 </select>
-                <select aria-label="Channel" value={channel} onChange={(e) => setChannel(e.target.value as LeadPitch['channel'])} style={{ ...field, height: 38, width: 'auto', fontSize: 12 }}>
+                <select aria-label="Channel" value={channel} onChange={(e) => setChannel(e.target.value as LeadPitch['channel'])} style={{ ...field, height: 36, width: 'auto', fontSize: 12 }}>
                   <option value="whatsapp">WhatsApp</option>
                   <option value="email">Email</option>
                 </select>
                 <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={polish} onChange={(e) => setPolish(e.target.checked)} />Polish with AI</label>
-                <button type="button" className="tp-btn-primary" disabled={!!busy} style={{ ...primaryBtn, height: 38, padding: '0 18px', fontSize: 12, color: '#fff', marginLeft: 'auto' }} onClick={() => run('pitch', async () => { await businessApi.pitch(id, variant, channel, polish); apply(await businessApi.get(id)); })}>{busy === 'pitch' ? 'Writing…' : 'Write pitch'}</button>
+                <button type="button" className="tp-btn-primary" disabled={!!busy} style={{ ...primaryBtn, height: 36, padding: '0 18px', fontSize: 12, color: '#fff', marginLeft: 'auto' }} onClick={() => run('pitch', async () => { await businessApi.pitch(id, variant, channel, polish); apply(await businessApi.get(id)); })}>{busy === 'pitch' ? 'Writing…' : 'Write pitch'}</button>
               </div>
               {lead.pitches.length === 0 ? <div style={{ fontSize: 13, color: '#606979' }}>No pitches yet.</div> : [...lead.pitches].reverse().map((p) => (
                 <div key={p.id} style={{ background: '#fff', borderRadius: 14, padding: 12, fontSize: 13 }}>
@@ -233,11 +233,11 @@ const LeadDrawer: FC<{ id: string; onClose: () => void; onChanged: () => void }>
               </div>
               <input style={field} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <select aria-label="Tier won" value={tier} onChange={(e) => setTier(e.target.value as TierId)} style={{ ...field, height: 38, width: 'auto', fontSize: 12 }}>
+                <select aria-label="Tier won" value={tier} onChange={(e) => setTier(e.target.value as TierId)} style={{ ...field, height: 36, width: 'auto', fontSize: 12 }}>
                   {(['good', 'better', 'best'] as TierId[]).map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <button type="button" className="tp-btn-primary" disabled={!!busy || lead.status === 'won'} style={{ ...primaryBtn, height: 38, padding: '0 18px', fontSize: 12, color: '#fff', background: '#0B7A4B' }} onClick={() => run('won', async () => { await businessApi.move(id, 'won', { note: note.trim() || undefined, deal: { tier } }); apply(await businessApi.get(id)); })}>Mark won</button>
-                <input style={{ ...field, height: 38, flex: '1 1 160px', width: 'auto', fontSize: 12 }} placeholder="Why lost? (optional)" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+                <button type="button" className="tp-btn-primary" disabled={!!busy || lead.status === 'won'} style={{ ...primaryBtn, height: 36, padding: '0 18px', fontSize: 12, color: '#fff', background: '#0B7A4B' }} onClick={() => run('won', async () => { await businessApi.move(id, 'won', { note: note.trim() || undefined, deal: { tier } }); apply(await businessApi.get(id)); })}>Mark won</button>
+                <input style={{ ...field, height: 36, flex: '1 1 160px', width: 'auto', fontSize: 12 }} placeholder="Why lost? (optional)" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
                 <button type="button" className="tp-btn-ghost" {...bar('lost')} onClick={() => run('lost', async () => { await businessApi.move(id, 'lost', { lostReason: lostReason.trim() || undefined }); apply(await businessApi.get(id)); })}>Mark lost</button>
               </div>
               {lead.deal && <div style={{ fontSize: 13, color: '#0B7A4B' }}>Deal: {lead.deal.tier} · {num(lead.deal.setup)} setup · {num(lead.deal.monthly)} / month</div>}
@@ -289,7 +289,7 @@ const FindTab: FC<{ onFound: () => void }> = ({ onFound }) => {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
       <div className="tp-card" style={{ ...cardStyle, flex: '2 1 380px', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 500 }}>Search an area</h2>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Search an area</h2>
         <p style={{ margin: 0, fontSize: 13, color: '#606979', lineHeight: 1.5 }}>Pick a type of business and a place. Results come from OpenStreetMap and can take a minute.</p>
         <form onSubmit={(e) => { e.preventDefault(); void go('search', async () => { const r = await businessApi.search(vertical, area.trim()); return `${r.added} new business${r.added === 1 ? '' : 'es'} added${r.cached ? ' (recent search reused)' : ''} near ${r.center.label}.`; }); }} style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <select aria-label="Business type" value={vertical} onChange={(e) => setVertical(e.target.value as Vertical)} style={{ ...field, flex: '1 1 160px', width: 'auto' }}>
@@ -303,14 +303,14 @@ const FindTab: FC<{ onFound: () => void }> = ({ onFound }) => {
       </div>
 
       <div className="tp-card" style={{ ...cardStyle, flex: '1 1 300px', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 500 }}>Import a list</h2>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Import a list</h2>
         <p style={{ margin: 0, fontSize: 13, color: '#606979', lineHeight: 1.5 }}>Upload a CSV or spreadsheet. A "consent" column marks who agreed to hear from you.</p>
         <input ref={file} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void go('import', async () => { const r = await businessApi.importLeads(f); return `${r.created} imported${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}.`; }); if (file.current) file.current.value = ''; }} />
         <button type="button" className="tp-btn-ghost" disabled={!!busy} onClick={() => file.current?.click()} style={ghostBtn}>{busy === 'import' ? 'Importing…' : 'Choose file'}</button>
       </div>
 
       <div className="tp-card" style={{ ...cardStyle, flex: '1 1 100%', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 500 }}>Add one yourself</h2>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Add one yourself</h2>
         <form onSubmit={(e) => { e.preventDefault(); void go('add', async () => { await businessApi.add({ name: manual.name.trim(), vertical, area: manual.area.trim() || undefined, website: manual.website.trim() || undefined, contacts: manual.phone.trim() ? [{ kind: 'phone', value: manual.phone.trim(), isBusinessLine: true }] : undefined }); setManual({ name: '', website: '', phone: '', area: '' }); return 'Business added to your pipeline.'; }); }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8 }}>
           <input style={field} placeholder="Business name" required value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} />
           <input style={field} placeholder="Website (optional)" value={manual.website} onChange={(e) => setManual({ ...manual, website: e.target.value })} />
@@ -422,7 +422,7 @@ const PipelineTab: FC<{ onOpen: (id: string) => void; goFind: () => void; versio
         {[['Businesses', leads.length], ['In conversation', (counts.contacted ?? 0) + (counts.replied ?? 0) + (counts.call_booked ?? 0)], ['Won', counts.won ?? 0], ['Monthly income won', num(mrr)]].map(([l, v]) => (
           <div key={String(l)} className="tp-card" style={{ ...cardStyle, flex: '1 1 160px', gap: 4 }}>
             <div style={{ fontSize: 12, color: '#606979' }}>{l}</div>
-            <div style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-.03em' }}>{res.loading ? '–' : v}</div>
+            <div style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-.03em' }}>{res.loading ? '–' : v}</div>
           </div>
         ))}
       </div>
@@ -488,7 +488,7 @@ export const Business: FC = () => {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 500, letterSpacing: '-.025em' }}>Business mode</h1>
           <p style={{ margin: '8px 0 0', fontSize: 14, color: '#606979' }}>Find businesses that need what you build, show them what they are missing, and move each one to a yes.</p>
         </div>
-        <button type="button" className="tp-btn-primary" onClick={() => go('find')} style={{ ...primaryBtn, color: '#fff', gap: 8 }}><Icon name="plus" size={16} sw={2} />Find businesses</button>
+        <button type="button" className="tp-btn-primary" onClick={() => go('find')} style={{ ...primaryBtn, color: '#fff', gap: 8 }}><Icon name="plus" size={16} />Find businesses</button>
       </div>
 
       <div style={{ margin: '24px 0 18px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>

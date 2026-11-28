@@ -14,6 +14,7 @@ import {
   revokeSession,
   rotate,
   startSignIn,
+  skipSetup,
   updateOnboardingStage,
   verifySignIn,
   type ClientMeta,
@@ -116,6 +117,10 @@ export class AuthController {
     res.json(await updateOnboardingStage(currentUser(req), b.stage));
   }
 
+  static async skipSetup(req: Request, res: Response) {
+    res.json(await skipSetup(currentUser(req)));
+  }
+
   static async me(req: Request, res: Response) {
     const userId = currentUser(req);
     const user = await User.findById(userId).lean();
@@ -133,6 +138,8 @@ export class AuthController {
       if (profile && (!profile.isSetupCompleted || !profile.setupCompleted)) {
         await Profile.updateOne({ _id: profile._id }, { isSetupCompleted: true, setupCompleted: true, status: 'verified' });
       }
+    } else if (user.setupSkipped) {
+      stage = 'completed';
     }
 
     res.json({
@@ -147,6 +154,7 @@ export class AuthController {
       profileStatus: profile?.status,
       isSetupCompleted: isCompleted,
       setupCompleted: isCompleted,
+      setupSkipped: !!user.setupSkipped && !isCompleted,
     });
   }
 }

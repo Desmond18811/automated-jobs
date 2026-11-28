@@ -6,6 +6,8 @@ export interface IUser {
   isEmailVerified?: boolean;
   onboardingStage?: 'otp_pending' | 'profile_setup' | 'completed';
   setupStep?: number;
+  /** The user chose to skip profile setup and go straight to the dashboard. */
+  setupSkipped?: boolean;
   isSetupCompleted?: boolean;
   setupCompleted?: boolean;
   profileImage?: string;
@@ -24,6 +26,7 @@ const userSchema = new Schema<IUser>(
       default: 'otp_pending',
     },
     setupStep: { type: Number, default: 1, min: 1, max: 9 },
+    setupSkipped: { type: Boolean, default: false },
     isSetupCompleted: { type: Boolean, default: false },
     setupCompleted: { type: Boolean, default: false },
     profileImage: String,

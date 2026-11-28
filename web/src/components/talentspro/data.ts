@@ -50,6 +50,18 @@ export const NEXT_STEP: Record<string, string> = {
   hired: 'Hired',
 };
 
+/** Application status changes, in plain words. */
+export const EVENT: Record<string, string> = {
+  discovered: 'Found', matched: 'Matched to you', drafted: 'Drafted', approved: 'Approved', needs_user: 'Needs your input',
+  sent: 'Application sent', replied: 'Recruiter replied', interview: 'Interview', offer: 'Offer received', hired: 'Hired',
+  rejected: 'Not selected', no_response: 'No response', failed: 'Failed to send', archived: 'Archived',
+};
+
+/** How each status shows on the today strip. */
+export const KIND: Record<string, 'sent' | 'reply' | 'needs' | 'win' | 'fail'> = {
+  sent: 'sent', replied: 'reply', needs_user: 'needs', interview: 'win', offer: 'win', hired: 'win', failed: 'fail', rejected: 'fail',
+};
+
 export const jobOf = (a: any) => (a?.jobId && typeof a.jobId === 'object' ? a.jobId : {});
 
 export function ago(d?: string | Date): string {

@@ -48,7 +48,7 @@ export const MeetIcon: FC<{ size?: number }> = ({ size = 22 }) => (
   </svg>
 );
 
-export const Icon: FC<{ name: keyof typeof PATHS | string; size?: number; sw?: number }> = ({ name, size = 20, sw = 1.7 }) => (
+export const Icon: FC<{ name: keyof typeof PATHS | string; size?: number; sw?: number }> = ({ name, size = 20, sw = 1.75 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {(PATHS[name] || []).map((d, i) => (
       <path key={i} d={d} />

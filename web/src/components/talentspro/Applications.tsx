@@ -53,7 +53,7 @@ export const Applications: FC = () => {
   };
 
   const pills: [Stage | null, string][] = [[null, 'All'], ['submitted', 'Submitted'], ['review', 'In review'], ['interview', 'Interviews']];
-  const head: React.CSSProperties = { fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.05em', color: '#606979' };
+  const head: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#606979' };
 
   return (
     <main style={{ paddingLeft: 8 }}>

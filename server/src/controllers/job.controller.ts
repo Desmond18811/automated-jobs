@@ -8,7 +8,7 @@ import { currentUser } from '../middleware/auth';
 import { JobPost } from '../models/jobPost.model';
 import { Application } from '../models/application.model';
 import { defaultJobOpts, queues } from '../queues';
-import { extractJobFromUrl, jobFromLink, upsertJob } from '../services/job.service';
+import { jobFromLink, readJobPage, upsertJob } from '../services/job.service';
 import type { RawJob } from '../sources/types';
 
 export const ManualJobSchema = z
@@ -70,10 +70,10 @@ export class JobController {
     let found: Partial<RawJob> = {};
     if (b.url && !(b.title && b.company && b.description)) {
       try {
-        found = await extractJobFromUrl(b.url);
+        found = await readJobPage(b.url);
       } catch (err) {
         if (!(b.title && b.company)) {
-          throw new AppError(422, `Could not read that page (${errorMessage(err)}). Paste the title, company and description yourself.`);
+          throw new AppError(422, `${safeHost(b.url) || 'That site'} didn't let us read the page (${errorMessage(err)}). Add the job title and company below and it will be saved with the link.`, 'needs_fields');
         }
       }
     }
@@ -148,7 +148,7 @@ export class JobController {
 
     // 1. Process URL
     if (url) {
-      const extracted = await extractJobFromUrl(url).catch(() => null);
+      const extracted = await readJobPage(url).catch(() => null);
       if (extracted?.title && extracted?.company) {
         rawJobsToSave.push({
           source: 'import:url',

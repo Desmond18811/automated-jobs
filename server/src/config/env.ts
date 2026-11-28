@@ -49,6 +49,10 @@ const schema = z.object({
   SMTP_SECURE: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
 
   // WhatsApp Alerts & Contact Updates
+  // Telegram bot for alerts and questions. Create one with @BotFather and paste its token here.
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  // Listen for bot messages by long polling (works on localhost). Turn off if a webhook is used instead.
+  TELEGRAM_POLLING: z.string().default('true').transform((v) => v.toLowerCase() !== 'false'),
   WHATSAPP_PROVIDER: z.enum(['textmebot', 'callmebot', 'twilio', 'cloudapi', 'simulated']).default('textmebot'),
   // Only for test scripts and admin alerts. User alerts always go to the user's own profile phone.
   WHATSAPP_TO: z.string().default(''),

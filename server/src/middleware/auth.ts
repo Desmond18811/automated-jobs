@@ -90,7 +90,10 @@ export const requireOnboarded: RequestHandler = async (req, _res, next) => {
   try {
     if (!req.userId) return next(new AppError(401, 'Not signed in'));
     const profile = await Profile.findOne({ userId: req.userId }).lean();
-    if (!isProfileComplete(profile)) return next(new AppError(403, 'Finish setting up your profile first'));
+    if (!isProfileComplete(profile)) {
+      const user = await User.findById(req.userId).select('setupSkipped').lean();
+      if (!user?.setupSkipped) return next(new AppError(403, 'Finish setting up your profile first'));
+    }
     next();
   } catch (err) {
     next(err);

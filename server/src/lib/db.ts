@@ -12,21 +12,19 @@ export async function connectDb(): Promise<void> {
 
   try {
     await mongoose.connect(env.MONGO_URI, {
-      serverSelectionTimeoutMS: 2500,
+      // Atlas over a slow network can take several seconds; too short a wait drops to the local store by mistake.
+      serverSelectionTimeoutMS: 10_000,
     });
     logger.info('MongoDB Atlas connected successfully');
   } catch (err: any) {
     if (env.NODE_ENV === 'production') throw err;
     logger.warn(
-      'MongoDB Atlas connection failed or IP not whitelisted. Activating in-memory store for offline & dev reliability.',
+      { reason: String(err?.message ?? err).slice(0, 160) },
+      'MongoDB Atlas is not reachable (often: this IP is not on the Atlas allow-list). Using the local dev store in .data/memory.json until the next restart.',
     );
+    // Stay on one store for the whole run: switching to Atlas mid-session would split users, sessions and
+    // profiles between two databases, which looks like being signed out or losing your profile.
     activateMemoryDb();
-
-    // Retry Atlas in background without blocking requests
-    setTimeout(() => {
-      isConnecting = false;
-      connectDb().catch(() => {});
-    }, 30_000).unref();
   } finally {
     isConnecting = false;
   }

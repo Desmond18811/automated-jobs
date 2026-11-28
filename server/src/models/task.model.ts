@@ -27,6 +27,8 @@ export interface ITask {
   answers?: Record<string, string>;
   /** 4-digit code the user puts at the start of a WhatsApp reply ("4821 yes"). */
   replyCode?: string;
+  /** The Telegram message that asked this, so a reply to it answers this task. */
+  telegramMessageId?: number;
   /** True while a live browser session is holding the page open, waiting on this task. */
   live?: boolean;
 }
@@ -42,6 +44,7 @@ const schema = new Schema<ITask>(
     status: { type: String, enum: ['open', 'answered', 'done', 'dismissed'], default: 'open' },
     answers: Schema.Types.Mixed,
     replyCode: String,
+    telegramMessageId: Number,
     live: Boolean,
   },
   { timestamps: true },

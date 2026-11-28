@@ -371,6 +371,13 @@ export const authApi = {
     return api('/auth/onboarding-stage', { method: 'PUT', json: { stage } });
   },
 
+  /** Go to the dashboard now and finish the profile later. */
+  skipSetup: async (): Promise<{ ok: boolean; stage: string }> => {
+    const r = await api<{ ok: boolean; stage: string }>('/auth/skip-setup', { method: 'POST' });
+    authStateStorage.setStage('completed');
+    return r;
+  },
+
   /** Renew the access token from the refresh cookie. Resolves null when there is no live session. */
   refresh: refreshSession,
 
@@ -820,6 +827,25 @@ export const analyticsApi = {
 // -----------------------------------------------------------------------------
 // 10. Diagnostic & Automated Tests API (Form Auto-Fill & WhatsApp Alerts)
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Telegram: alerts and questions go to the user's Telegram chat
+// -----------------------------------------------------------------------------
+export interface TelegramStatus {
+  configured: boolean;
+  bot: string | null;
+  linked: boolean;
+  username: string | null;
+  linkedAt: string | null;
+}
+
+export const telegramApi = {
+  status: (): Promise<TelegramStatus> => api('/telegram'),
+  /** A one-time t.me link; tapping Start in the bot connects this account. */
+  link: (): Promise<{ url: string; bot: string }> => api('/telegram/link', { method: 'POST' }),
+  unlink: (): Promise<TelegramStatus> => api('/telegram/link', { method: 'DELETE' }),
+  test: (): Promise<{ sent: boolean }> => api('/telegram/test', { method: 'POST' }),
+};
+
 export const testApi = {
   status: (): Promise<{ enabled: boolean; provider: string; whatsappConfigured: boolean; defaultRecipientSet: boolean }> => api('/test-status'),
   /** Tests candidate form mapping (LinkedIn, ATS fields, contacts, PDF resume) */

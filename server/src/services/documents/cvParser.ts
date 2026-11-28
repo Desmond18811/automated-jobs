@@ -5,7 +5,7 @@ import type { IProfile } from '../../models/profile.model';
 import { completeJson, optStr } from './llm';
 import { sectionOf } from './cvSections';
 
-export { CV_MIME, extractText } from './cvExtract';
+export { CV_MIME, cvMimeOf, extractText } from './cvExtract';
 
 const optVal = z
   .union([z.string(), z.number()])

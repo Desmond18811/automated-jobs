@@ -72,7 +72,7 @@ export const AddJob: FC<{ onClose: () => void; onDone: () => void }> = ({ onClos
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Add jobs" onMouseDown={(e) => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(23,25,31,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 80 }}>
-      <form onSubmit={submit} style={{ width: 'min(680px,100%)', minHeight: 'min(560px,92vh)', maxHeight: '92vh', overflow: 'auto', background: '#fff', borderRadius: 28, padding: 26, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 30px 60px -30px rgba(23,25,31,.5)' }}>
+      <form onSubmit={submit} style={{ width: 'min(680px,100%)', minHeight: 'min(560px,92vh)', maxHeight: '92vh', overflow: 'auto', background: '#fff', borderRadius: 24, padding: 26, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 30px 60px -30px rgba(23,25,31,.5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500 }}>Add jobs</h2>
           <button type="button" aria-label="Close" onClick={onClose} style={{ border: 0, background: '#EDF1F6', width: 36, height: 36, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={16} /></button>
@@ -80,7 +80,7 @@ export const AddJob: FC<{ onClose: () => void; onDone: () => void }> = ({ onClos
 
         {done ? (
           <>
-            <div style={{ background: '#F2F6FF', borderRadius: 18, padding: 18, fontSize: 14, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ background: '#F2F6FF', borderRadius: 20, padding: 18, fontSize: 14, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {done.lines.map((l, i) => <div key={i}>{l}</div>)}
             </div>
             <button type="button" className="tp-btn-primary" onClick={onDone} style={{ ...primaryBtn, marginTop: 'auto' }}>Done</button>
@@ -93,7 +93,7 @@ export const AddJob: FC<{ onClose: () => void; onDone: () => void }> = ({ onClos
               <>
                 <p style={{ margin: 0, fontSize: 13, color: '#606979', lineHeight: 1.5 }}>Paste one link, or as many as you like, separated by spaces or new lines. We read each page for the role, company and description.</p>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 14, top: 14, color: '#606979', display: 'flex' }}><Icon name="link" size={18} /></span>
+                  <span style={{ position: 'absolute', left: 14, top: 14, color: '#606979', display: 'flex' }}><Icon name="link" size={16} /></span>
                   <textarea autoFocus aria-label="Job links" value={text} onChange={(e) => setText(e.target.value)} placeholder={'https://company.com/careers/role\nhttps://boards.greenhouse.io/…'} style={{ ...field, height: 150, padding: '12px 14px 12px 42px', resize: 'vertical', lineHeight: 1.5 }} />
                 </div>
                 <div style={{ fontSize: 12, color: '#98A1AF' }}>{urls.length === 0 ? 'No links yet' : `${urls.length} link${urls.length === 1 ? '' : 's'} found`}</div>
@@ -120,10 +120,10 @@ export const AddJob: FC<{ onClose: () => void; onDone: () => void }> = ({ onClos
                   onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
                   onDragLeave={() => setDrag(false)}
                   onDrop={drop}
-                  style={{ flex: 1, minHeight: 180, borderRadius: 22, border: `2px dashed ${drag ? '#2457E8' : '#C7D4EC'}`, background: drag ? '#F2F6FF' : '#F8FAFD', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 20 }}
+                  style={{ flex: 1, minHeight: 180, borderRadius: 20, border: `2px dashed ${drag ? '#2457E8' : '#C7D4EC'}`, background: drag ? '#F2F6FF' : '#F8FAFD', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 20 }}
                 >
                   <input ref={input} type="file" accept={ACCEPT} hidden onChange={(e) => pick(e.target.files)} />
-                  <span style={{ width: 52, height: 52, borderRadius: '50%', background: '#EAF1FF', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="doc" size={22} /></span>
+                  <span style={{ width: 52, height: 52, borderRadius: '50%', background: '#EAF1FF', color: '#2457E8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="doc" size={20} /></span>
                   {file ? <div style={{ fontSize: 14, fontWeight: 500 }}>{file.name} <span style={{ color: '#98A1AF', fontWeight: 400 }}>({Math.max(1, Math.round(file.size / 1024))} KB)</span></div> : <div style={{ fontSize: 14 }}>Drop a file here</div>}
                   <button type="button" className="tp-btn-ghost" onClick={() => input.current?.click()} style={{ ...ghostBtn, height: 40, fontSize: 13 }}>{file ? 'Choose another' : 'Choose file'}</button>
                   <div style={{ fontSize: 11, color: '#98A1AF' }}>Up to 10 MB</div>

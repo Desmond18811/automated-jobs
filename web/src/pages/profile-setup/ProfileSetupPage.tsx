@@ -43,6 +43,23 @@ export const ProfileSetupPage: FC = () => {
   const [problems, setProblems] = useState<string[]>([]);
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [skipError, setSkipError] = useState('');
+  const editing = new URLSearchParams(window.location.search).get('edit') === '1';
+
+  // Leave setup for the dashboard; what has been typed so far is saved first.
+  const skip = async () => {
+    setSkipping(true);
+    setSkipError('');
+    try {
+      await writes.current;
+      if (!editing) await authApi.skipSetup();
+      nav('/dash', { replace: true });
+    } catch (e: any) {
+      setSkipError(e?.message || 'Could not skip setup. Try again.');
+      setSkipping(false);
+    }
+  };
 
   useEffect(() => {
     if (loading || loadError || ready) return;
@@ -90,13 +107,21 @@ export const ProfileSetupPage: FC = () => {
       const json = JSON.stringify(payloadRef.current);
       const token = tokenStorage.get();
       if (!token || json === lastSaved.current || !Object.keys(payloadRef.current).length) return;
-      lastSaved.current = json;
+      // Browsers cap a request that outlives the page at 64 KB. If the photo pushes it over, send the rest now
+      // and leave the step marked unsaved so the photo goes with the next normal save.
+      let body = JSON.stringify({ ...payloadRef.current, setupStep: indexRef.current + 1 });
+      const tooBig = new Blob([body]).size > 60_000;
+      if (tooBig) {
+        const { avatarUrl: _skip, ...rest } = payloadRef.current as Record<string, unknown>;
+        body = JSON.stringify({ ...rest, setupStep: indexRef.current + 1 });
+      }
+      if (!tooBig) lastSaved.current = json;
       void fetch(`${API_BASE}/profile`, {
         method: 'PUT',
         keepalive: true,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...payloadRef.current, setupStep: indexRef.current + 1 }),
+        body,
       }).catch(() => undefined);
     };
     const onVisibility = () => document.visibilityState === 'hidden' && flush();
@@ -265,6 +290,15 @@ export const ProfileSetupPage: FC = () => {
           <div style={{ width: isMobile ? 60 : 120, height: 6, background: '#f2f4f7', borderRadius: 99, overflow: 'hidden' }}>
             <div style={{ width: `${((index + 1) / STEPS.length) * 100}%`, height: '100%', background: C.text, borderRadius: 99, transition: 'width 0.3s ease' }} />
           </div>
+          <button
+            type="button"
+            onClick={skip}
+            disabled={skipping}
+            title={editing ? undefined : 'Go to the dashboard now and finish your profile later'}
+            style={{ height: 36, padding: '0 14px', borderRadius: 99, border: `1px solid ${C.divider}`, background: '#fff', color: C.text, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: skipping ? 'wait' : 'pointer', whiteSpace: 'nowrap', opacity: skipping ? 0.6 : 1 }}
+          >
+            {skipping ? 'Saving…' : editing ? 'Back to dashboard' : 'Skip for now'}
+          </button>
         </div>
       </header>
 
@@ -280,6 +314,7 @@ export const ProfileSetupPage: FC = () => {
           zIndex: 2,
         }}
       >
+        {skipError && <Notice tone="danger">{skipError}</Notice>}
         {loading || (!ready && !loadError) ? (
           <p style={{ color: C.muted, fontSize: 14 }}>Loading your profile…</p>
         ) : loadError ? (

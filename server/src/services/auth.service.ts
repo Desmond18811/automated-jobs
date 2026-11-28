@@ -337,6 +337,15 @@ export async function revokeAllSessions(userId: string): Promise<void> {
   forgetSessions();
 }
 
+/** Lets the user into the dashboard before their profile is complete. The profile itself stays incomplete. */
+export async function skipSetup(userId: string): Promise<{ ok: boolean; stage: string }> {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError(404, 'User not found');
+  user.setupSkipped = true;
+  await user.save();
+  return { ok: true, stage: 'completed' };
+}
+
 export async function updateOnboardingStage(
   userId: string,
   stage: 'otp_pending' | 'profile_setup' | 'completed',

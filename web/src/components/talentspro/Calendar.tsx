@@ -52,11 +52,11 @@ export const Calendar: FC<{ onClose: () => void }> = ({ onClose }) => {
   const dayEvents = byDay.get(dayKey(sel)) ?? [];
   const sentOn = (d: Date) => (byDay.get(dayKey(d)) ?? []).filter((e) => e.to === 'sent').length;
   const nav = (n: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1));
-  const btn = { width: 40, height: 40, borderRadius: '50%', border: '1px solid #E3E9F2', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } as const;
+  const btn = { width: 44, height: 44, borderRadius: '50%', border: '1px solid #E3E9F2', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } as const;
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Calendar" onMouseDown={(e) => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(23,25,31,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 80 }}>
-      <div style={{ width: 'min(880px,100%)', maxHeight: '92vh', overflow: 'auto', background: '#fff', borderRadius: 28, padding: 24, display: 'flex', flexWrap: 'wrap', gap: 24, boxShadow: '0 30px 60px -30px rgba(23,25,31,.5)' }}>
+      <div style={{ width: 'min(880px,100%)', maxHeight: '92vh', overflow: 'auto', background: '#fff', borderRadius: 24, padding: 24, display: 'flex', flexWrap: 'wrap', gap: 24, boxShadow: '0 30px 60px -30px rgba(23,25,31,.5)' }}>
         <div style={{ flex: '1 1 360px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500, flex: 1 }}>{month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h2>
@@ -71,9 +71,9 @@ export const Calendar: FC<{ onClose: () => void }> = ({ onClose }) => {
               const active = dayKey(d) === dayKey(sel);
               const isToday = dayKey(d) === dayKey(today);
               return (
-                <button key={i} type="button" onClick={() => setSel(d)} aria-label={`${d.toDateString()}, ${n} updates`} aria-pressed={active} style={{ height: 52, borderRadius: 16, border: isToday && !active ? '1.5px solid #2457E8' : '1px solid transparent', background: active ? '#2457E8' : n ? '#F2F6FF' : 'transparent', color: active ? '#fff' : '#17191F', fontSize: 14, fontWeight: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <button key={i} type="button" onClick={() => setSel(d)} aria-label={`${d.toDateString()}, ${n} updates`} aria-pressed={active} style={{ height: 52, borderRadius: 14, border: isToday && !active ? '1.5px solid #2457E8' : '1px solid transparent', background: active ? '#2457E8' : n ? '#F2F6FF' : 'transparent', color: active ? '#fff' : '#17191F', fontSize: 14, fontWeight: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                   {d.getDate()}
-                  <span style={{ fontSize: 10, fontWeight: 500, color: active ? 'rgba(255,255,255,.85)' : '#2457E8', height: 12 }}>{sentOn(d) ? `${sentOn(d)} sent` : n ? `${n}` : ''}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: active ? 'rgba(255,255,255,.85)' : '#2457E8', height: 12 }}>{sentOn(d) ? `${sentOn(d)} sent` : n ? `${n}` : ''}</span>
                 </button>
               );
             })}
@@ -90,9 +90,9 @@ export const Calendar: FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
           {err && <div role="alert" style={{ fontSize: 13, color: '#B4232F', marginBottom: 8 }}>{err}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
-            {events !== null && dayEvents.length === 0 && <div style={{ background: '#F5F8FC', borderRadius: 18, padding: 18, fontSize: 13, color: '#606979' }}>Nothing happened on this day.</div>}
+            {events !== null && dayEvents.length === 0 && <div style={{ background: '#F5F8FC', borderRadius: 20, padding: 18, fontSize: 13, color: '#606979' }}>Nothing happened on this day.</div>}
             {dayEvents.map((e, i) => (
-              <div key={i} style={{ background: '#F5F8FC', borderRadius: 18, padding: '10px 14px' }}>
+              <div key={i} style={{ background: '#F5F8FC', borderRadius: 20, padding: '10px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 500 }}>
                   <span>{LABEL[e.to] || e.to}</span>
                   <span style={{ color: '#98A1AF', fontWeight: 400 }}>{new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>

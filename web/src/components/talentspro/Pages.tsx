@@ -13,7 +13,7 @@ const SOON: Record<string, { icon: string; title: string }> = {
 export const ComingSoon: FC<{ page: keyof typeof SOON }> = ({ page }) => {
   const s = SOON[page];
   return (
-    <main style={{ marginTop: 52, paddingLeft: 8 }}>
+    <main style={{ marginTop: 44, paddingLeft: 8 }}>
       <h1 style={{ margin: '0 0 24px', fontSize: 30, fontWeight: 500, letterSpacing: '-.025em' }}>{s.title}</h1>
       <div className="tp-card" style={{ ...cardStyle, maxWidth: 560 }}>
         <EmptyState icon={s.icon} title="Nothing here yet" body={page === 'business' ? 'Business mode will find companies and send them outreach so they come to need you. It is being set up next.' : `${s.title} is not available in your workspace yet.`} cta={{ to: '/dash', label: 'Back to dashboard' }} />
@@ -42,7 +42,7 @@ export const ProfilePage: FC = () => {
     ['Primary skills', (profile.primarySkills || []).join(', ')],
   ];
   return (
-    <main style={{ marginTop: 52, paddingLeft: 8 }}>
+    <main style={{ marginTop: 44, paddingLeft: 8 }}>
       <h1 style={{ margin: '0 0 24px', fontSize: 30, fontWeight: 500, letterSpacing: '-.025em' }}>Profile</h1>
       <div className="tp-card" style={{ ...cardStyle, maxWidth: 640, gap: 14 }}>
         {rows.map(([k, v]) => (
@@ -65,7 +65,7 @@ export const NotFound: FC<{ home?: string }> = ({ home = '/' }) => (
   <main style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: '#17191F' }}>
     <div style={{ textAlign: 'center', maxWidth: 380 }}>
       <div style={{ fontSize: 64, fontWeight: 500, letterSpacing: '-.04em', color: '#2457E8', lineHeight: 1 }}>404</div>
-      <h1 style={{ margin: '12px 0 6px', fontSize: 22, fontWeight: 500 }}>This page doesn't exist</h1>
+      <h1 style={{ margin: '12px 0 6px', fontSize: 24, fontWeight: 500 }}>This page doesn't exist</h1>
       <p style={{ margin: '0 0 20px', fontSize: 14, color: '#606979', lineHeight: 1.5 }}>The link may be wrong or the page may have moved.</p>
       <Link to={home} style={{ ...primaryBtn, color: '#fff', textDecoration: 'none' }}>{home === '/' ? 'Go home' : 'Back to dashboard'}</Link>
     </div>

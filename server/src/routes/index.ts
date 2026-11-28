@@ -12,6 +12,7 @@ import notificationRoutes from './notification.routes';
 import profileRoutes from './profile.routes';
 import taskRoutes from './task.routes';
 import testRoutes from './test.routes';
+import telegramRoutes from './telegram.routes';
 import taxonomyRoutes from './taxonomy.routes';
 import replyRoutes from './reply.routes';
 
@@ -38,6 +39,8 @@ apiRouter.use(replyRoutes); // public: /reply/:token and /webhooks/whatsapp/twil
 
 apiRouter.use('/gmail', gmailRoutes); // callback is public; other routes check auth
 apiRouter.use('/profile', profileRoutes);
+// Setup needs this before the profile is complete, so it is not behind requireOnboarded.
+apiRouter.use('/telegram', requireAuth, telegramRoutes);
 apiRouter.use('/jobs', requireAuth, requireOnboarded, jobRoutes);
 apiRouter.use('/applications', requireAuth, requireOnboarded, applicationRoutes);
 apiRouter.use('/tasks', requireAuth, requireOnboarded, taskRoutes);
