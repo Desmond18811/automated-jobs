@@ -111,7 +111,20 @@ export const authStateStorage = {
       localStorage.setItem('javi_setup_step', String(step));
     } catch {}
   },
+  /** This browser has had a working session (cleared on sign-out or when the session truly expires). */
+  wasSignedIn: (): boolean => {
+    try {
+      return localStorage.getItem('javi_signed_in') === '1';
+    } catch {
+      return false;
+    }
+  },
   saveSession: (user?: { name?: string; email?: string; onboardingStage?: string; setupStep?: number }): void => {
+    try {
+      localStorage.setItem('javi_signed_in', '1');
+    } catch {
+      /* private mode */
+    }
     if (user?.name) authStateStorage.setLastName(user.name);
     if (user?.email) authStateStorage.setLastEmail(user.email);
     if (user?.onboardingStage) authStateStorage.setStage(user.onboardingStage as any);

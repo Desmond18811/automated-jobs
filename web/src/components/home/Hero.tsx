@@ -1,6 +1,6 @@
 import { useState, useEffect, type FC, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { tokenStorage } from '@/api';
+import { authStateStorage, tokenStorage } from '@/api';
 import { ensureSession } from '@/lib/session';
 import {
   CalendarLogo,
@@ -134,9 +134,9 @@ const CHIPS: ChipItem[] = [
 
 export const Hero: FC = () => {
   const isMobile = useIsMobile();
-  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken());
+  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken() || authStateStorage.wasSignedIn());
   useEffect(() => {
-    void ensureSession().then((ok) => setIsSignedIn(ok));
+    void ensureSession().then((ok) => setIsSignedIn(ok || authStateStorage.wasSignedIn()));
   }, []);
 
   if (isMobile) {

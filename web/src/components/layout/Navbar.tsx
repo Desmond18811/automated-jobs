@@ -2,7 +2,7 @@ import { useState, useEffect, type FC } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { JaviBrandMark } from '@/assets/logos';
 import { useIsMobile } from '@/hooks/useStageScale';
-import { tokenStorage } from '@/api';
+import { authStateStorage, tokenStorage } from '@/api';
 import { ensureSession } from '@/lib/session';
 
 const NAV_LINKS = [
@@ -17,12 +17,12 @@ export const Navbar: FC = () => {
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken());
+  const [isSignedIn, setIsSignedIn] = useState(() => tokenStorage.hasToken() || authStateStorage.wasSignedIn());
 
   // Close mobile drawer on route change & refresh session status
   useEffect(() => {
     setMobileMenuOpen(false);
-    void ensureSession().then((ok) => setIsSignedIn(ok));
+    void ensureSession().then((ok) => setIsSignedIn(ok || authStateStorage.wasSignedIn()));
   }, [pathname]);
 
   if (isMobile) {

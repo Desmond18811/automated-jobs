@@ -220,7 +220,7 @@ export const Shell: FC = () => {
                   </div>
                 ))
               )}
-              <Link to="/dash/applications" className="tp-btn-ghost" style={{ marginTop: 8, height: 44, borderRadius: 999, border: '1px solid #DCE3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#17191F' }}>
+              <Link to="/dash/applications?view=review" className="tp-btn-ghost" style={{ marginTop: 8, height: 44, borderRadius: 999, border: '1px solid #DCE3EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#17191F' }}>
                 Open applications
               </Link>
             </div>

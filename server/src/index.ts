@@ -3,11 +3,14 @@ import { env } from './config/env';
 import { createApp } from './app';
 import { connectDb, disconnectDb } from './lib/db';
 import { logger } from './lib/logger';
+import { isInMemoryActive } from './lib/memoryDb';
+import { startWorkers } from './workers/start';
 import { initSocketServer } from './lib/socket';
 import { startTelegramPolling, stopTelegramPolling } from './services/telegram.service';
 
 export const app = createApp();
 export let server: http.Server | null = null;
+let stopWorkers: (() => Promise<void>) | null = null;
 
 export async function startServer() {
   await connectDb();
@@ -16,6 +19,17 @@ export async function startServer() {
   server.listen(env.PORT, () => {
     logger.info(`JAVI API server listening on :http://localhost:${env.PORT} 🟢`);
   });
+  // The local dev store can't be shared between processes, so the API runs the queue workers itself
+  // (matching, drafting, applying). With Atlas, run `npm run dev:worker` separately as usual.
+  if (isInMemoryActive() && env.NODE_ENV !== 'production') {
+    startWorkers().then(
+      (stop) => {
+        stopWorkers = stop;
+        logger.info('Local dev store: workers are running inside the API process');
+      },
+      (err) => logger.warn({ err: err?.message }, 'Workers did not start (is Redis running?)'),
+    );
+  }
   // The bot listens in the API process only, so there is exactly one poller per token.
   startTelegramPolling().catch((err) => logger.warn({ err: err?.message }, 'Telegram bot did not start'));
   return server;
@@ -23,6 +37,7 @@ export async function startServer() {
 
 export async function stopServer() {
   stopTelegramPolling();
+  await stopWorkers?.().catch(() => undefined);
   if (server) {
     await new Promise<void>((resolve, reject) => {
       server!.close((err) => (err ? reject(err) : resolve()));
